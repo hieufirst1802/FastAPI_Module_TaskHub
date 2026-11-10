@@ -1,10 +1,18 @@
-# Bài 4 — Core Features & Configuration
+# FastAPI Module TaskHub — Bài 5: Review & Optimization
 
-Nhánh: `codex/day4-core-features`. Bổ sung middleware, exception handlers, Redis cache, settings đa môi trường, logging, Swagger/ReDoc và Docker Compose.
+Repository gồm **5 nhánh**, mỗi nhánh là một bài thực hành chạy độc lập.
 
-Kế thừa đầy đủ JWT/RBAC/ownership của bài 3. Chạy và thực hành theo hướng dẫn dưới đây.
+| Bài | Nhánh | Nội dung |
+| --- | --- | --- |
+| 1 | [codex/day1-core-setup](../../tree/codex/day1-core-setup) | Skeleton, layered architecture, DI, Pydantic v2, CRUD trong bộ nhớ |
+| 2 | [codex/day2-database](../../tree/codex/day2-database) | SQLAlchemy async, repository, quan hệ, pagination, Alembic |
+| 3 | [codex/day3-auth-rbac](../../tree/codex/day3-auth-rbac) | Password hashing, JWT, RBAC, resource ownership |
+| 4 | [codex/day4-core-features](../../tree/codex/day4-core-features) | Redis, middleware, exceptions, settings, logging, Docker |
+| 5 | `main` — nhánh hiện tại | Bản hoàn chỉnh, kiểm thử, quality checks, review hiệu năng |
 
-# Bài thực hành FastAPI — Task Manager
+Chọn nhánh ở menu GitHub hoặc dùng `git switch <tên-nhánh>`, sau đó làm theo README
+của bài đó. Bài sau kế thừa bài trước. Tên day là mốc bài, không thay đổi thời lượng
+8 ngày trong đề. Xem [bảng phân chia](EXERCISES_PLAN.md) và [báo cáo review](REVIEW.md).
 
 Sample app quản lý công việc, triển khai theo các nội dung nhìn thấy trong 3 ảnh.
 Ảnh không chứa mục 2 mô tả sample app gốc; vì vậy domain Task Manager là giả định
