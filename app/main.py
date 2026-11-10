@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.api import router
 from app.config import Settings, get_settings
+from app.security import passwords
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -16,6 +17,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         engine = create_async_engine(config.database_url, pool_pre_ping=True)
         app.state.settings = config
+        app.state.dummy_hash = passwords.hash("dummy-password-for-timing")
         app.state.sessions = async_sessionmaker(engine, expire_on_commit=False)
         try:
             async with engine.connect() as connection:
@@ -24,7 +26,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         finally:
             await engine.dispose()
 
-    app = FastAPI(title="TaskHub - Bai 2 Database", lifespan=lifespan)
+    app = FastAPI(title="TaskHub - Bai 3 Authentication and RBAC", lifespan=lifespan)
 
     @app.get("/health")
     async def health(request: Request) -> dict[str, str]:
