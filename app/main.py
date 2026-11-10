@@ -1,22 +1,35 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.api import router
-from app.repositories import TaskRepository
+from app.config import Settings, get_settings
 
 
-def create_app() -> FastAPI:
+def create_app(settings: Settings | None = None) -> FastAPI:
+    config = settings or get_settings()
+
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        app.state.repository = TaskRepository()
-        yield
+        engine = create_async_engine(config.database_url, pool_pre_ping=True)
+        app.state.settings = config
+        app.state.sessions = async_sessionmaker(engine, expire_on_commit=False)
+        try:
+            async with engine.connect() as connection:
+                await connection.execute(text("SELECT 1"))
+            yield
+        finally:
+            await engine.dispose()
 
-    app = FastAPI(title="TaskHub - Bai 1 Core Setup", lifespan=lifespan)
+    app = FastAPI(title="TaskHub - Bai 2 Database", lifespan=lifespan)
 
     @app.get("/health")
-    def health() -> dict[str, str]:
+    async def health(request: Request) -> dict[str, str]:
+        async with request.app.state.sessions() as session:
+            await session.execute(text("SELECT 1"))
         return {"status": "ok"}
 
     app.include_router(router)

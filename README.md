@@ -1,24 +1,29 @@
-# Bài 1 — Core Setup & Architecture
+# Bài 2 — Database, Repository & Alembic
 
-Nhánh: `codex/day1-core-setup`. Đây là một bài riêng, checkout và chạy trực tiếp từ thư mục gốc.
+Nhánh: `codex/day2-database`. Đây là một bài riêng, checkout và chạy trực tiếp từ thư mục gốc.
 
 ## Mục tiêu và phần đã hoàn thành
 
 
-- FastAPI app factory, APIRouter, lifespan khởi tạo repository riêng cho mỗi app.
-- Layered API → service → repository, Dependency Injection từ request.app.state.
-- Pydantic v2, validation và CRUD Task trong bộ nhớ, mã lỗi 404/422.
-- Thực hành: POST /api/tasks với {"title":"Học FastAPI"}; GET /api/tasks;
-  PATCH /api/tasks/1 với {"completed":true}; DELETE /api/tasks/1.
-- Dữ liệu mất khi khởi động lại; dùng một worker cho bài trong bộ nhớ.
-- Không cần .env hay database ở bài này. Tests kiểm tra CRUD và dữ liệu tách theo app.
+- SQLAlchemy 2 async, AsyncSession theo request; model User 1–n Task, khóa ngoại và index.
+- Generic BaseRepository[T] có get/create/update/delete/page; phân trang offset/limit và total.
+- Alembic initial migration, nâng/hạ schema. CRUD lưu SQLite, hỗ trợ URL PostgreSQL asyncpg.
+- Tài khoản demo cố định minh họa quan hệ; chưa có đăng nhập/phân quyền ở bài 2.
+  Thực hành local một người dùng; bài 3 bổ sung bảo vệ API.
+- Thử POST /api/tasks với {"title":"Task lưu DB"}; khởi động lại và GET /api/tasks.
+- Thử `uv run alembic downgrade base` rồi `uv run alembic upgrade head` trên DB thực hành trống;
+  downgrade xóa bảng và dữ liệu. `uv run alembic check` không được có schema drift.
+- Test xác minh dữ liệu còn sau khi tạo lại app, PATCH, DELETE và giới hạn pagination.
 
 
 ## Cài đặt và chạy (PowerShell)
 
 ```powershell
-git switch codex/day1-core-setup
+git switch codex/day2-database
 uv sync --locked
+Copy-Item .env.example .env
+# Sua JWT_SECRET (toi thieu 32 ky tu)
+uv run alembic upgrade head
 uv run uvicorn app.main:create_app --factory --reload
 ```
 
