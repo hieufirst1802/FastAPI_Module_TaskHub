@@ -96,6 +96,7 @@ def test_auth_and_validation(client):
         client.get("/api/tasks", headers={"Authorization": "Bearer " + expired}).status_code == 401
     )
     assert client.get("/health").status_code == 200
+    assert "X-Request-ID" in client.get("/health").headers
     assert client.get("/openapi.json").status_code == 200
 
 
