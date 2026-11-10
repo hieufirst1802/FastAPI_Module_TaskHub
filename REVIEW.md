@@ -41,6 +41,19 @@ Compose config đã được kiểm tra cú pháp. Docker Engine chưa chạy tr
 chuẩn bị đầu tiên, nên chưa xác minh tích hợp PostgreSQL và Redis server thực tế.
 Một cảnh báo deprecation xuất phát từ TestClient/httpx ở thư viện đã cài; test vẫn pass.
 
+## Kết quả kiểm thử từng bài
+
+Đã chạy riêng từng thư mục bài trong một Python interpreter riêng để tránh dùng
+nhầm import của bản hoàn chỉnh; Python 3.14, SQLite tạm riêng cho tests.
+
+| Bài | Pytest | Ruff | mypy strict |
+| --- | --- | --- | --- |
+| 1 Core Setup | 1 passed | Đạt | Đạt |
+| 2 Database | 1 passed | Đạt | Đạt |
+| 3 Auth/RBAC | 4 passed | Đạt | Đạt |
+| 4 Core Features | 5 passed | Đạt | Đạt |
+| 5 Review (`main`) | 5 passed | Đạt | Đạt |
+
 ## Giới hạn phạm vi
 
 Ảnh không có mục 2 mô tả sample app gốc. TaskHub dùng domain Task Manager để

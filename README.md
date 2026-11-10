@@ -4,10 +4,10 @@ Repository gồm **5 nhánh**, mỗi nhánh là một bài thực hành chạy �
 
 | Bài | Nhánh | Nội dung |
 | --- | --- | --- |
-| 1 | [codex/day1-core-setup](../../tree/codex/day1-core-setup) | Skeleton, layered architecture, DI, Pydantic v2, CRUD trong bộ nhớ |
-| 2 | [codex/day2-database](../../tree/codex/day2-database) | SQLAlchemy async, repository, quan hệ, pagination, Alembic |
-| 3 | [codex/day3-auth-rbac](../../tree/codex/day3-auth-rbac) | Password hashing, JWT, RBAC, resource ownership |
-| 4 | [codex/day4-core-features](../../tree/codex/day4-core-features) | Redis, middleware, exceptions, settings, logging, Docker |
+| 1 | [codex/day1-core-setup](https://github.com/hieufirst1802/FastAPI_Module_TaskHub/tree/codex/day1-core-setup) | Skeleton, layered architecture, DI, Pydantic v2, CRUD trong bộ nhớ |
+| 2 | [codex/day2-database](https://github.com/hieufirst1802/FastAPI_Module_TaskHub/tree/codex/day2-database) | SQLAlchemy async, repository, quan hệ, pagination, Alembic |
+| 3 | [codex/day3-auth-rbac](https://github.com/hieufirst1802/FastAPI_Module_TaskHub/tree/codex/day3-auth-rbac) | Password hashing, JWT, RBAC, resource ownership |
+| 4 | [codex/day4-core-features](https://github.com/hieufirst1802/FastAPI_Module_TaskHub/tree/codex/day4-core-features) | Redis, middleware, exceptions, settings, logging, Docker |
 | 5 | `main` — nhánh hiện tại | Bản hoàn chỉnh, kiểm thử, quality checks, review hiệu năng |
 
 Chọn nhánh ở menu GitHub hoặc dùng `git switch <tên-nhánh>`, sau đó làm theo README
