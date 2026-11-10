@@ -1,3 +1,4 @@
+import hashlib
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
@@ -82,8 +83,16 @@ async def read_task(
     session: Session,
     user: CurrentUser,
 ) -> TaskOut:
+    # Always authorize against DB before consulting cached content.
     task = await TaskService(session).owned(identifier, user)
-    return TaskOut.model_validate(task)
+    key = f"tasks:{task.id}:{task.owner_id}:{task.title}:{task.description}:{task.completed}"
+    key = "task:" + hashlib.sha256(key.encode()).hexdigest()
+    cached = await request.app.state.cache.get(key)
+    if cached:
+        return TaskOut.model_validate_json(cached)
+    result = TaskOut.model_validate(task)
+    await request.app.state.cache.put(key, result.model_dump_json())
+    return result
 
 
 @router.patch("/tasks/{identifier}", response_model=TaskOut, tags=["Tasks"])
