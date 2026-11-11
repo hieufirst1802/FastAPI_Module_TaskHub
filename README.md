@@ -32,7 +32,3 @@ uv run ruff check .
 uv run ruff format --check .
 uv run mypy app
 ```
-
-Các bài có phần mở rộng tích lũy: core → database → security → features → review.
-`main` là bài 5, bốn nhánh `codex/day*` là bài 1–4, tổng đúng 5 nhánh.
-Tên day là mốc bài thực hành, không có nghĩa giáo trình chỉ có 5 ngày.
