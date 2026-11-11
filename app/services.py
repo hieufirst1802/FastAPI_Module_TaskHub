@@ -1,25 +1,16 @@
 from fastapi import HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.repositories import TaskRepository
-from app.schemas import TaskOut, TaskUpdate
+from app.models import Task, User
+from app.repositories import BaseRepository
 
 
 class TaskService:
-    def __init__(self, repository: TaskRepository):
-        self.repository = repository
+    def __init__(self, session: AsyncSession):
+        self.repository = BaseRepository(session, Task)
 
-    def get(self, identifier: int) -> TaskOut:
-        row = self.repository.get(identifier)
-        if row is None:
+    async def owned(self, identifier: int, user: User) -> Task:
+        task = await self.repository.get(identifier)
+        if task is None or (task.owner_id != user.id and user.role != "admin"):
             raise HTTPException(404, "Task not found")
-        return row
-
-    def update(self, identifier: int, data: TaskUpdate) -> TaskOut:
-        row = self.repository.update(identifier, data.model_dump(exclude_unset=True))
-        if row is None:
-            raise HTTPException(404, "Task not found")
-        return row
-
-    def delete(self, identifier: int) -> None:
-        if not self.repository.delete(identifier):
-            raise HTTPException(404, "Task not found")
+        return task

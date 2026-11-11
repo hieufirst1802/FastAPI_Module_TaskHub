@@ -1,39 +1,57 @@
-from threading import RLock
 from typing import Any
 
-from app.schemas import TaskCreate, TaskOut
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
+
+from app.models import Base, User
 
 
-class TaskRepository:
-    def __init__(self) -> None:
-        self.rows: dict[int, TaskOut] = {}
-        self.next_id = 1
-        self.lock = RLock()
+class BaseRepository[T: Base]:
+    def __init__(self, session: AsyncSession, model: type[T]):
+        self.session = session
+        self.model = model
 
-    def create(self, data: TaskCreate) -> TaskOut:
-        with self.lock:
-            row = TaskOut(id=self.next_id, **data.model_dump())
-            self.next_id += 1
-            self.rows[row.id] = row
-            return row
+    async def get(self, identifier: int) -> T | None:
+        return await self.session.get(self.model, identifier)
 
-    def get(self, identifier: int) -> TaskOut | None:
-        with self.lock:
-            return self.rows.get(identifier)
+    async def page(
+        self, offset: int, limit: int, *filters: ColumnElement[bool]
+    ) -> tuple[list[T], int]:
+        total = await self.session.scalar(
+            select(func.count()).select_from(self.model).where(*filters)
+        )
+        rows = await self.session.scalars(
+            select(self.model)
+            .where(*filters)
+            .order_by(self.model.__table__.c.id)
+            .offset(offset)
+            .limit(limit)
+        )
+        return list(rows), int(total or 0)
 
-    def page(self, offset: int, limit: int) -> list[TaskOut]:
-        with self.lock:
-            return list(self.rows.values())[offset : offset + limit]
+    async def create(self, **values: Any) -> T:
+        entity = self.model(**values)
+        self.session.add(entity)
+        await self.session.commit()
+        await self.session.refresh(entity)
+        return entity
 
-    def update(self, identifier: int, values: dict[str, Any]) -> TaskOut | None:
-        with self.lock:
-            row = self.rows.get(identifier)
-            if row is None:
-                return None
-            updated = TaskOut.model_validate(row.model_dump() | values)
-            self.rows[identifier] = updated
-            return updated
+    async def update(self, entity: T, values: dict[str, Any]) -> T:
+        for key, value in values.items():
+            setattr(entity, key, value)
+        await self.session.commit()
+        await self.session.refresh(entity)
+        return entity
 
-    def delete(self, identifier: int) -> bool:
-        with self.lock:
-            return self.rows.pop(identifier, None) is not None
+    async def delete(self, entity: T) -> None:
+        await self.session.delete(entity)
+        await self.session.commit()
+
+
+class UserRepository(BaseRepository[User]):
+    def __init__(self, session: AsyncSession):
+        super().__init__(session, User)
+
+    async def by_username(self, username: str) -> User | None:
+        return await self.session.scalar(select(User).where(User.username == username))
