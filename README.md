@@ -1,6 +1,6 @@
 # Bài 2 — Database, Repository & Alembic
 
-Nhánh: `codex/day2-database`. Đây là một bài riêng, checkout và chạy trực tiếp từ thư mục gốc.
+Nhánh: `lesson-2`. Đây là một bài riêng, checkout và chạy trực tiếp từ thư mục gốc.
 
 ## Mục tiêu và phần đã hoàn thành
 
@@ -19,7 +19,7 @@ Nhánh: `codex/day2-database`. Đây là một bài riêng, checkout và chạy 
 ## Cài đặt và chạy (PowerShell)
 
 ```powershell
-git switch codex/day2-database
+git switch lesson-2
 uv sync --locked
 Copy-Item .env.example .env
 # Sua JWT_SECRET (toi thieu 32 ky tu)
@@ -39,5 +39,5 @@ uv run mypy app
 ```
 
 Các bài có phần mở rộng tích lũy: core → database → security → features → review.
-`main` là bài 5, bốn nhánh `codex/day*` là bài 1–4, tổng đúng 5 nhánh.
+Mỗi bài có một nhánh `lesson-*` và một PR riêng vào `main`.
 Tên day là mốc bài thực hành, không có nghĩa giáo trình chỉ có 5 ngày.
