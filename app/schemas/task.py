@@ -14,13 +14,8 @@ class TaskUpdate(BaseSchema):
 
     @model_validator(mode="after")
     def non_null(self) -> "TaskUpdate":
-        if any(
-            getattr(self, name) is None
-            for name in self.model_fields_set
-        ):
-            raise ValueError(
-                "Omit unchanged fields; null is not allowed"
-            )
+        if any(getattr(self, name) is None for name in self.model_fields_set):
+            raise ValueError("Omit unchanged fields; null is not allowed")
         return self
 
 

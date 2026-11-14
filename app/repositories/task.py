@@ -32,9 +32,7 @@ class TaskRepository:
         limit: int,
     ) -> list[TaskOut]:
         with self.lock:
-            return list(self.rows.values())[
-                offset:offset + limit
-            ]
+            return list(self.rows.values())[offset : offset + limit]
 
     def update(
         self,
@@ -47,9 +45,7 @@ class TaskRepository:
             if row is None:
                 return None
 
-            updated = TaskOut.model_validate(
-                row.model_dump() | values
-            )
+            updated = TaskOut.model_validate(row.model_dump() | values)
 
             self.rows[identifier] = updated
 
@@ -57,7 +53,4 @@ class TaskRepository:
 
     def delete(self, identifier: int) -> bool:
         with self.lock:
-            return (
-                self.rows.pop(identifier, None)
-                is not None
-            )
+            return self.rows.pop(identifier, None) is not None
