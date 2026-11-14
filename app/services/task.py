@@ -1,35 +1,56 @@
-from app.core.exceptions import TaskNotFoundError
+from app.core.exceptions import NotFoundException
+from app.models.task import Task
 from app.repositories.task import TaskRepository
-from app.schemas.task import TaskOut, TaskUpdate
+from app.schemas.pagination import PaginationParams
+from app.schemas.task import TaskCreate, TaskOut, TaskUpdate
 
 
 class TaskService:
     def __init__(self, repository: TaskRepository) -> None:
         self.repository = repository
 
-    def get(self, identifier: int) -> TaskOut:
-        row = self.repository.get(identifier)
+    @staticmethod
+    def _to_schema(task: Task) -> TaskOut:
+        return TaskOut(
+            id=task.id,
+            title=task.title,
+            completed=task.completed,
+        )
 
-        if row is None:
-            raise TaskNotFoundError(identifier)
+    def create(self, data: TaskCreate) -> TaskOut:
+        task = self.repository.create(data.model_dump())
+        return self._to_schema(task)
 
-        return row
+    def page(self, pagination: PaginationParams) -> list[TaskOut]:
+        tasks = self.repository.page(
+            pagination.offset,
+            pagination.limit,
+        )
+        return [self._to_schema(task) for task in tasks]
+
+    def get(self, task_id: int) -> TaskOut:
+        task = self.repository.get(task_id)
+
+        if task is None:
+            raise NotFoundException(task_id)
+
+        return self._to_schema(task)
 
     def update(
         self,
-        identifier: int,
+        task_id: int,
         data: TaskUpdate,
     ) -> TaskOut:
-        row = self.repository.update(
-            identifier,
+        task = self.repository.update(
+            task_id,
             data.model_dump(exclude_unset=True),
         )
 
-        if row is None:
-            raise TaskNotFoundError(identifier)
+        if task is None:
+            raise NotFoundException(task_id)
 
-        return row
+        return self._to_schema(task)
 
-    def delete(self, identifier: int) -> None:
-        if not self.repository.delete(identifier):
-            raise TaskNotFoundError(identifier)
+    def delete(self, task_id: int) -> None:
+        if not self.repository.delete(task_id):
+            raise NotFoundException(task_id)

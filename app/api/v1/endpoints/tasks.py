@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, Path, Request, Response
 
 from app.repositories.task import TaskRepository
 from app.schemas.pagination import PaginationParams
@@ -34,43 +34,40 @@ Service = Annotated[
 @router.post("", response_model=TaskOut, status_code=201)
 def create(
     data: TaskCreate,
-    repository: Repository,
+    service: Service,
 ) -> TaskOut:
-    return repository.create(data)
+    return service.create(data)
 
 
 @router.get("", response_model=list[TaskOut])
 def page(
-    repository: Repository,
+    service: Service,
     pagination: Annotated[PaginationParams, Depends()],
 ) -> list[TaskOut]:
-    return repository.page(
-        pagination.offset,
-        pagination.limit,
-    )
+    return service.page(pagination)
 
 
-@router.get("/{identifier}", response_model=TaskOut)
+@router.get("/{task_id}", response_model=TaskOut)
 def read(
-    identifier: int,
+    task_id: Annotated[int, Path(gt=0)],
     service: Service,
 ) -> TaskOut:
-    return service.get(identifier)
+    return service.get(task_id)
 
 
-@router.patch("/{identifier}", response_model=TaskOut)
+@router.patch("/{task_id}", response_model=TaskOut)
 def update(
-    identifier: int,
+    task_id: Annotated[int, Path(gt=0)],
     data: TaskUpdate,
     service: Service,
 ) -> TaskOut:
-    return service.update(identifier, data)
+    return service.update(task_id, data)
 
 
-@router.delete("/{identifier}", status_code=204)
+@router.delete("/{task_id}", status_code=204)
 def delete(
-    identifier: int,
+    task_id: Annotated[int, Path(gt=0)],
     service: Service,
 ) -> Response:
-    service.delete(identifier)
+    service.delete(task_id)
     return Response(status_code=204)

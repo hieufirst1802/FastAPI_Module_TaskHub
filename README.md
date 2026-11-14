@@ -1,4 +1,4 @@
-# FastAPI Module TaskHub
+﻿# FastAPI Module TaskHub
 
 Dự án thực hành xây dựng REST API bằng FastAPI theo kiến trúc phân lớp. Các chức năng được phát triển theo từng giai đoạn, từ thiết lập nền tảng đến cơ sở dữ liệu, xác thực và mở rộng tính năng.
 
@@ -26,7 +26,8 @@ app/
 │       └── router.py
 ├── core/
 │   ├── constants.py
-│   └── exceptions.py
+│   ├── exceptions.py
+│   └── messages.py
 ├── models/
 │   └── task.py
 ├── repositories/
@@ -65,9 +66,9 @@ Sau khi chạy, truy cập:
 |---|---|---|
 | POST | `/api/tasks` | Tạo Task |
 | GET | `/api/tasks` | Lấy danh sách Task |
-| GET | `/api/tasks/{identifier}` | Lấy Task theo ID |
-| PATCH | `/api/tasks/{identifier}` | Cập nhật Task |
-| DELETE | `/api/tasks/{identifier}` | Xóa Task |
+| GET | `/api/tasks/{task_id}` | Lấy Task theo ID |
+| PATCH | `/api/tasks/{task_id}` | Cập nhật Task |
+| DELETE | `/api/tasks/{task_id}` | Xóa Task |
 
 Ví dụ tạo Task:
 
@@ -108,4 +109,11 @@ Dự án sử dụng `pyproject.toml` để khai báo dependencies và `uv.lock`
 Đồng bộ môi trường:
 
 ```cmd
+uv sync --locked
+```
+
+Cập nhật lockfile khi dependencies thay đổi:
+
+```cmd
+uv lock
 ```

@@ -1,20 +1,20 @@
 from threading import RLock
 from typing import Any
 
-from app.schemas.task import TaskCreate, TaskOut
+from app.models.task import Task
 
 
 class TaskRepository:
     def __init__(self) -> None:
-        self.rows: dict[int, TaskOut] = {}
+        self.rows: dict[int, Task] = {}
         self.next_id = 1
         self.lock = RLock()
 
-    def create(self, data: TaskCreate) -> TaskOut:
+    def create(self, values: dict[str, Any]) -> Task:
         with self.lock:
-            row = TaskOut(
+            row = Task(
                 id=self.next_id,
-                **data.model_dump(),
+                **values,
             )
 
             self.next_id += 1
@@ -22,7 +22,7 @@ class TaskRepository:
 
             return row
 
-    def get(self, identifier: int) -> TaskOut | None:
+    def get(self, identifier: int) -> Task | None:
         with self.lock:
             return self.rows.get(identifier)
 
@@ -30,7 +30,7 @@ class TaskRepository:
         self,
         offset: int,
         limit: int,
-    ) -> list[TaskOut]:
+    ) -> list[Task]:
         with self.lock:
             return list(self.rows.values())[offset : offset + limit]
 
@@ -38,14 +38,18 @@ class TaskRepository:
         self,
         identifier: int,
         values: dict[str, Any],
-    ) -> TaskOut | None:
+    ) -> Task | None:
         with self.lock:
             row = self.rows.get(identifier)
 
             if row is None:
                 return None
 
-            updated = TaskOut.model_validate(row.model_dump() | values)
+            updated = Task(
+                id=row.id,
+                title=values.get("title", row.title),
+                completed=values.get("completed", row.completed),
+            )
 
             self.rows[identifier] = updated
 
