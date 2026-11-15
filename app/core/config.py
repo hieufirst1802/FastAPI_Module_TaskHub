@@ -12,6 +12,11 @@ class Settings(BaseSettings):
     environment: str = "development"
     database_url: str = "sqlite+aiosqlite:///./tasks.db"
 
+    # JWT configuration
+    jwt_secret_key: str = "dev-only-change-this-secret-key-2026"
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 30
+
 
 @lru_cache
 def get_settings() -> Settings:
