@@ -65,12 +65,12 @@ Sau khi chạy, truy cập:
 | Method | Endpoint | Chức năng |
 |---|---|---|
 | POST | `/api/tasks` | Tạo Task |
-| GET | `/api/tasks` | Lấy danh sách Task |
+| GET | `/api/tasks` | Lấy danh sách Task có phân trang |
 | GET | `/api/tasks/{task_id}` | Lấy Task theo ID |
 | PATCH | `/api/tasks/{task_id}` | Cập nhật Task |
 | DELETE | `/api/tasks/{task_id}` | Xóa Task |
 
-Ví dụ tạo Task:
+**Ví dụ tạo Task:**
 
 ```json
 {
@@ -78,7 +78,7 @@ Ví dụ tạo Task:
 }
 ```
 
-Ví dụ cập nhật Task:
+**Ví dụ cập nhật Task:**
 
 ```json
 {
@@ -86,12 +86,55 @@ Ví dụ cập nhật Task:
 }
 ```
 
+**Phân trang danh sách Task:**
+
+Endpoint: `GET /api/tasks`
+
+| Query parameter | Mặc định | Giới hạn | Mô tả |
+|---|---:|---:|---|
+| `offset` | 0 | ≥ 0 | Vị trí bắt đầu lấy dữ liệu |
+| `limit` | 20 | 1–100 | Số Task tối đa mỗi trang |
+
+Ví dụ:
+
+```http
+GET /api/tasks?offset=0&limit=20
+```
+
+**Ví dụ response:**
+
+```json
+{
+  "items": [
+    {
+      "id": 1,
+      "title": "Học FastAPI",
+      "completed": false
+    }
+  ],
+  "total": 1,
+  "offset": 0,
+  "limit": 20
+}
+```
+
+Trong đó:
+
+- `items`: Danh sách Task của trang hiện tại.
+- `total`: Tổng số Task hiện có.
+- `offset`: Vị trí bắt đầu lấy dữ liệu.
+- `limit`: Số Task tối đa được yêu cầu.
+
+Các lỗi validation trả về HTTP 422. Nếu không tìm thấy Task theo ID, API trả về HTTP 404.
+
 ### 6. Phạm vi Day 1
 
 - Dữ liệu được lưu trong In-memory Repository, chưa sử dụng database.
 - Dữ liệu sẽ mất khi ứng dụng khởi động lại.
 - Mỗi ứng dụng được tạo bằng application factory có repository riêng.
 - Vì dữ liệu chỉ lưu trong bộ nhớ, nên sử dụng một worker khi chạy ứng dụng.
+
+- Task hiện có hai trạng thái: chưa hoàn thành (`false`) và đã hoàn thành (`true`).
 
 ### 7. Kiểm tra chất lượng
 

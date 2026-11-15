@@ -1,7 +1,7 @@
 from app.core.exceptions import NotFoundException
 from app.models.task import Task
 from app.repositories.task import TaskRepository
-from app.schemas.pagination import PaginationParams
+from app.schemas.pagination import PaginationParams, TaskPage
 from app.schemas.task import TaskCreate, TaskOut, TaskUpdate
 
 
@@ -21,12 +21,18 @@ class TaskService:
         task = self.repository.create(data.model_dump())
         return self._to_schema(task)
 
-    def page(self, pagination: PaginationParams) -> list[TaskOut]:
+    def page(self, pagination: PaginationParams) -> TaskPage:
         tasks = self.repository.page(
             pagination.offset,
             pagination.limit,
         )
-        return [self._to_schema(task) for task in tasks]
+
+        return TaskPage(
+            items=[self._to_schema(task) for task in tasks],
+            total=self.repository.count(),
+            offset=pagination.offset,
+            limit=pagination.limit,
+        )
 
     def get(self, task_id: int) -> TaskOut:
         task = self.repository.get(task_id)

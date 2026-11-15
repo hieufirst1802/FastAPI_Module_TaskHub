@@ -26,6 +26,10 @@ class TaskRepository:
         with self.lock:
             return self.rows.get(identifier)
 
+    def count(self) -> int:
+        with self.lock:
+            return len(self.rows)
+
     def page(
         self,
         offset: int,

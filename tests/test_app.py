@@ -4,26 +4,6 @@ from fastapi.testclient import TestClient
 from app.main import create_app
 
 
-def test_crud_validation_and_app_isolation():
-    with TestClient(create_app()) as client:
-        assert client.get("/health").json() == {"status": "ok"}
-        assert client.post("/api/tasks", json={"title": " "}).status_code == 422
-        response = client.post("/api/tasks", json={"title": "Learn routing"})
-        assert response.status_code == 201
-        identifier = response.json()["id"]
-        assert len(client.get("/api/tasks").json()) == 1
-        assert client.get(f"/api/tasks/{identifier}").json()["title"] == "Learn routing"
-        assert client.patch(f"/api/tasks/{identifier}", json={"completed": True}).json()[
-            "completed"
-        ]
-        assert client.patch(f"/api/tasks/{identifier}", json={"title": None}).status_code == 422
-        assert client.delete(f"/api/tasks/{identifier}").status_code == 204
-        assert client.get(f"/api/tasks/{identifier}").status_code == 404
-        assert client.get("/openapi.json").status_code == 200
-    with TestClient(create_app()) as client:
-        assert client.get("/api/tasks").json() == []
-
-
 @pytest.fixture
 def client():
     with TestClient(create_app()) as test_client:
@@ -73,7 +53,10 @@ def test_list_tasks(client: TestClient):
     response = client.get("/api/tasks")
 
     assert response.status_code == 200
-    assert len(response.json()) == 2
+    assert len(response.json()["items"]) == 2
+    assert response.json()["total"] == 2
+    assert response.json()["offset"] == 0
+    assert response.json()["limit"] == 20
 
 
 def test_pagination(client: TestClient):
@@ -83,9 +66,31 @@ def test_pagination(client: TestClient):
     response = client.get("/api/tasks?offset=1&limit=2")
 
     assert response.status_code == 200
-    assert len(response.json()) == 2
-    assert response.json()[0]["title"] == "Task 1"
-    assert response.json()[1]["title"] == "Task 2"
+    assert len(response.json()["items"]) == 2
+    assert response.json()["total"] == 5
+    assert response.json()["offset"] == 1
+    assert response.json()["limit"] == 2
+    assert response.json()["items"][0]["title"] == "Task 1"
+    assert response.json()["items"][1]["title"] == "Task 2"
+
+
+def test_pagination_empty(client: TestClient):
+    response = client.get("/api/tasks")
+
+    assert response.status_code == 200
+    assert response.json()["items"] == []
+    assert response.json()["total"] == 0
+
+
+def test_pagination_offset_beyond_total(client: TestClient):
+    for number in range(3):
+        create_task(client, f"Task {number}")
+
+    response = client.get("/api/tasks?offset=10&limit=2")
+
+    assert response.status_code == 200
+    assert response.json()["items"] == []
+    assert response.json()["total"] == 3
 
 
 @pytest.mark.parametrize(
@@ -193,7 +198,8 @@ def test_app_isolation():
         response = second_client.get("/api/tasks")
 
         assert response.status_code == 200
-        assert response.json() == []
+        assert response.json()["items"] == []
+        assert response.json()["total"] == 0
 
 
 def test_openapi(client: TestClient):

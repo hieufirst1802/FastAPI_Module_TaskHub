@@ -5,6 +5,8 @@ from app.core.constants import (
     DEFAULT_PAGE_OFFSET,
     MAX_PAGE_LIMIT,
 )
+from app.schemas.base import BaseSchema
+from app.schemas.task import TaskOut
 
 
 class PaginationParams(BaseModel):
@@ -17,3 +19,10 @@ class PaginationParams(BaseModel):
         ge=1,
         le=MAX_PAGE_LIMIT,
     )
+
+
+class TaskPage(BaseSchema):
+    items: list[TaskOut]
+    total: int = Field(ge=0)
+    offset: int = Field(ge=0)
+    limit: int = Field(ge=1)
