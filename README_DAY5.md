@@ -1,6 +1,6 @@
 # Day 5 – Middleware & Exception Handling
 
-Gói này chứa các file cần thêm/thay thế trên branch `lesson-5-middleware-exceptions`, dựa trên branch Day 4 `lesson-4-authorization`.
+Gói này cung cấp các file cần thiết để triển khai Day 5 trên branch `lesson-5-middleware-exceptions`, kế thừa nền tảng phân quyền đã được xây dựng ở Day 4 (`lesson-4-authorization`).
 
 ## Nội dung
 
