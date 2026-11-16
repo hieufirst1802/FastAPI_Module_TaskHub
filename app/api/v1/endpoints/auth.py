@@ -1,4 +1,3 @@
-
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -35,17 +34,10 @@ async def register(
     data: RegisterRequest,
     service: AuthServiceDependency,
 ) -> UserResponse:
-    try:
-        user = await service.register(
-            username=data.username,
-            password=data.password,
-        )
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=str(exc),
-        ) from exc
-
+    user = await service.register(
+        username=data.username,
+        password=data.password,
+    )
     return UserResponse.model_validate(user)
 
 

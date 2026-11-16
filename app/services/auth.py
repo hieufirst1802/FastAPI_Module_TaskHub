@@ -1,7 +1,7 @@
-
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import UsernameAlreadyExistsError
 from app.core.security import (
     create_access_token,
     hash_password,
@@ -24,7 +24,7 @@ class AuthService:
         existing_user = await self.users.by_username(username)
 
         if existing_user is not None:
-            raise ValueError("Username already registered")
+            raise UsernameAlreadyExistsError()
 
         try:
             user = await self.users.create(
@@ -34,7 +34,7 @@ class AuthService:
             )
         except IntegrityError as exc:
             await self.session.rollback()
-            raise ValueError("Username already registered") from exc
+            raise UsernameAlreadyExistsError() from exc
 
         return user
 

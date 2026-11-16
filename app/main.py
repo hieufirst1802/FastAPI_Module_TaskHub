@@ -7,6 +7,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.api.v1.router import router
 from app.core.config import Settings, get_settings
+from app.core.exception_handlers import register_exception_handlers
+from app.middleware.request_logging import RequestLoggingMiddleware
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -35,10 +37,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             await engine.dispose()
 
     app = FastAPI(
-        title="TaskHub - Bai 2 Database",
+        title="TaskHub - FastAPI Practice",
         lifespan=lifespan,
     )
 
+    app.add_middleware(RequestLoggingMiddleware)
+    register_exception_handlers(app)
     app.include_router(router)
 
     return app
