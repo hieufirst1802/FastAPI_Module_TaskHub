@@ -2,7 +2,7 @@ import logging
 from time import perf_counter
 
 from fastapi import Request
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import Response
 
 logger = logging.getLogger("app.request")
@@ -14,7 +14,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(
         self,
         request: Request,
-        call_next,
+        call_next: RequestResponseEndpoint,
     ) -> Response:
         started_at = perf_counter()
         status_code = 500

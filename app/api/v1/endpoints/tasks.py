@@ -1,7 +1,6 @@
-
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 
 from app.core.database import Session
 from app.core.dependencies import CurrentUser
@@ -14,13 +13,13 @@ from app.services.task import TaskService
 router = APIRouter(prefix="/api/tasks", tags=["Tasks"])
 
 
-def get_task_service(session: Session) -> TaskService:
+def get_task_service(session: Session, request: Request) -> TaskService:
     task_repository = TaskRepository(session)
 
-    return TaskService(task_repository)
+    return TaskService(task_repository, request.app.state.task_cache)
 
 
-def to_task_out(task: Task) -> TaskOut:
+def to_task_out(task: Task | TaskOut) -> TaskOut:
     return TaskOut.model_validate(task)
 
 

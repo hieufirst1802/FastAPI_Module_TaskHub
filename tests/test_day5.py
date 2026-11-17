@@ -22,9 +22,7 @@ def prepare_database(settings: Settings) -> None:
 
 
 def make_settings(tmp_path: Path) -> Settings:
-    return Settings(
-        database_url=f"sqlite+aiosqlite:///{(tmp_path / 'day5.db').as_posix()}"
-    )
+    return Settings(database_url=f"sqlite+aiosqlite:///{(tmp_path / 'day5.db').as_posix()}")
 
 
 def test_request_logging_middleware_adds_process_time_header(

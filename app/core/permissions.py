@@ -1,5 +1,4 @@
-
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, status
@@ -10,7 +9,7 @@ from app.models.user import User
 
 def require_role(
     *allowed_roles: str,
-) -> Callable[..., User]:
+) -> Callable[..., Awaitable[User]]:
     """Create a dependency that checks the current user's role."""
 
     async def role_checker(

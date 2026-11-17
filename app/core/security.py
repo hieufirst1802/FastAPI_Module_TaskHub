@@ -1,11 +1,10 @@
-
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import jwt
 from pwdlib import PasswordHash
 
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 
 password_hash = PasswordHash.recommended()
 
@@ -23,17 +22,18 @@ def verify_password(password: str, hashed_password: str) -> bool:
 def create_access_token(
     subject: str,
     expires_delta: timedelta | None = None,
+    settings: Settings | None = None,
 ) -> str:
     """Create a signed JWT access token."""
-    settings = get_settings()
+    settings = settings or get_settings()
 
     expire = datetime.now(UTC) + (
-        expires_delta
-        or timedelta(minutes=settings.access_token_expire_minutes)
+        expires_delta or timedelta(minutes=settings.access_token_expire_minutes)
     )
 
     payload: dict[str, Any] = {
         "sub": subject,
+        "type": "access",
         "exp": expire,
     }
 
@@ -44,12 +44,16 @@ def create_access_token(
     )
 
 
-def decode_access_token(token: str) -> dict[str, Any]:
+def decode_access_token(token: str, settings: Settings | None = None) -> dict[str, Any]:
     """Decode and validate a JWT access token."""
-    settings = get_settings()
+    settings = settings or get_settings()
 
-    return jwt.decode(
+    payload = jwt.decode(
         token,
         settings.jwt_secret_key,
         algorithms=[settings.jwt_algorithm],
+        options={"require": ["sub", "exp", "type"]},
     )
+    if payload.get("type") != "access":
+        raise jwt.InvalidTokenError("Wrong token type")
+    return payload

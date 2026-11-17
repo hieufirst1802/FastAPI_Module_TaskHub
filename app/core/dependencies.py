@@ -1,8 +1,7 @@
-
 from typing import Annotated
 
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import (
     HTTPAuthorizationCredentials,
     HTTPBearer,
@@ -22,6 +21,7 @@ CurrentCredentials = Annotated[
 
 
 async def get_current_user(
+    request: Request,
     credentials: CurrentCredentials,
     session: Session,
 ) -> User:
@@ -35,7 +35,7 @@ async def get_current_user(
         raise unauthorized
 
     try:
-        payload = decode_access_token(credentials.credentials)
+        payload = decode_access_token(credentials.credentials, request.app.state.settings)
         subject = payload.get("sub")
 
         if not isinstance(subject, str):
@@ -47,7 +47,7 @@ async def get_current_user(
 
     user = await UserRepository(session).get(user_id)
 
-    if user is None:
+    if user is None or not user.is_active:
         raise unauthorized
 
     return user

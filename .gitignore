@@ -9,3 +9,4 @@ __pycache__/
 *.db-*
 .exercise-build/
 *.egg-info/
+dist/

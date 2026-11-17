@@ -36,4 +36,5 @@ class TaskOut(BaseModel):
     title: str
     description: str
     completed: bool
+    project_id: int | None = None
     owner_id: int

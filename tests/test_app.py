@@ -33,10 +33,7 @@ def update_user_role(
         try:
             async with engine.begin() as connection:
                 await connection.execute(
-                    text(
-                        "UPDATE users SET role = :role "
-                        "WHERE username = :username"
-                    ),
+                    text("UPDATE users SET role = :role WHERE username = :username"),
                     {"role": role, "username": username},
                 )
         finally:
@@ -45,11 +42,8 @@ def update_user_role(
     asyncio.run(update_role())
 
 
-
 def test_crud_validation_and_pagination(tmp_path: Path) -> None:
-    settings = Settings(
-        database_url=f"sqlite+aiosqlite:///{(tmp_path / 'test.db').as_posix()}"
-    )
+    settings = Settings(database_url=f"sqlite+aiosqlite:///{(tmp_path / 'test.db').as_posix()}")
     prepare_database(settings)
 
     with TestClient(create_app(settings)) as client:
@@ -74,9 +68,7 @@ def test_crud_validation_and_pagination(tmp_path: Path) -> None:
         )
         assert login.status_code == 200
 
-        headers = {
-            "Authorization": f"Bearer {login.json()['access_token']}"
-        }
+        headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
 
         # Validation
         invalid = client.post(
@@ -175,7 +167,6 @@ def test_crud_validation_and_pagination(tmp_path: Path) -> None:
         assert client.get("/openapi.json").status_code == 200
 
 
-
 def test_database_persistence_across_app_restart(tmp_path: Path) -> None:
     settings = Settings(
         database_url=f"sqlite+aiosqlite:///{(tmp_path / 'persistent.db').as_posix()}"
@@ -201,9 +192,7 @@ def test_database_persistence_across_app_restart(tmp_path: Path) -> None:
         )
         assert login.status_code == 200
 
-        headers = {
-            "Authorization": f"Bearer {login.json()['access_token']}"
-        }
+        headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
 
         response = client.post(
             "/api/tasks",
@@ -224,9 +213,7 @@ def test_database_persistence_across_app_restart(tmp_path: Path) -> None:
         )
         assert login.status_code == 200
 
-        headers = {
-            "Authorization": f"Bearer {login.json()['access_token']}"
-        }
+        headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
 
         response = client.get(
             f"/api/tasks/{identifier}",
@@ -238,9 +225,7 @@ def test_database_persistence_across_app_restart(tmp_path: Path) -> None:
 
 
 def test_authentication_flow(tmp_path: Path) -> None:
-    settings = Settings(
-        database_url=f"sqlite+aiosqlite:///{(tmp_path / 'auth.db').as_posix()}"
-    )
+    settings = Settings(database_url=f"sqlite+aiosqlite:///{(tmp_path / 'auth.db').as_posix()}")
     prepare_database(settings)
 
     with TestClient(create_app(settings)) as client:
@@ -309,9 +294,7 @@ def test_authentication_flow(tmp_path: Path) -> None:
         assert token_data["token_type"] == "bearer"
         assert token_data["access_token"]
 
-        headers = {
-            "Authorization": f"Bearer {token_data['access_token']}"
-        }
+        headers = {"Authorization": f"Bearer {token_data['access_token']}"}
 
         # 6. Access current user with valid token
         me = client.get("/api/auth/me", headers=headers)
@@ -332,10 +315,9 @@ def test_authentication_flow(tmp_path: Path) -> None:
 
         assert invalid_token.status_code == 401
 
+
 def test_user_rbac(tmp_path: Path) -> None:
-    settings = Settings(
-        database_url=f"sqlite+aiosqlite:///{(tmp_path / 'rbac.db').as_posix()}"
-    )
+    settings = Settings(database_url=f"sqlite+aiosqlite:///{(tmp_path / 'rbac.db').as_posix()}")
     prepare_database(settings)
 
     with TestClient(create_app(settings)) as client:
@@ -364,9 +346,7 @@ def test_user_rbac(tmp_path: Path) -> None:
         assert member_login.status_code == 200
 
         member_token = member_login.json()["access_token"]
-        member_headers = {
-            "Authorization": f"Bearer {member_token}"
-        }
+        member_headers = {"Authorization": f"Bearer {member_token}"}
 
         # 4. Member must be forbidden
         forbidden = client.get(
@@ -398,9 +378,7 @@ def test_user_rbac(tmp_path: Path) -> None:
         assert admin_login.status_code == 200
 
         admin_token = admin_login.json()["access_token"]
-        admin_headers = {
-            "Authorization": f"Bearer {admin_token}"
-        }
+        admin_headers = {"Authorization": f"Bearer {admin_token}"}
 
         # 7. Admin can access users
         response = client.get(
@@ -453,11 +431,7 @@ def test_task_ownership_and_admin_access(tmp_path: Path) -> None:
             )
             assert response.status_code == 200
 
-            return {
-                "Authorization": (
-                    f"Bearer {response.json()['access_token']}"
-                )
-            }
+            return {"Authorization": (f"Bearer {response.json()['access_token']}")}
 
         headers_a = login("member_a")
         headers_b = login("member_b")

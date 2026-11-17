@@ -4,6 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.exceptions import AppException
@@ -13,8 +14,9 @@ logger = logging.getLogger(__name__)
 
 async def app_exception_handler(
     request: Request,
-    exc: AppException,
+    exc: Exception,
 ) -> JSONResponse:
+    assert isinstance(exc, AppException)
     return JSONResponse(
         status_code=exc.status_code,
         content={
@@ -28,8 +30,9 @@ async def app_exception_handler(
 
 async def validation_exception_handler(
     request: Request,
-    exc: RequestValidationError,
+    exc: Exception,
 ) -> JSONResponse:
+    assert isinstance(exc, RequestValidationError)
     return JSONResponse(
         status_code=422,
         content={
@@ -44,8 +47,9 @@ async def validation_exception_handler(
 
 async def http_exception_handler(
     request: Request,
-    exc: StarletteHTTPException,
+    exc: Exception,
 ) -> JSONResponse:
+    assert isinstance(exc, StarletteHTTPException)
     return JSONResponse(
         status_code=exc.status_code,
         content={
@@ -79,7 +83,21 @@ async def unhandled_exception_handler(
     )
 
 
+async def integrity_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    # The session dependency rolls back before this handler runs.
+    return JSONResponse(
+        status_code=409,
+        content={
+            "error": {
+                "code": "data_conflict",
+                "message": "Data conflicts with an existing record or reference",
+            }
+        },
+    )
+
+
 def register_exception_handlers(app: FastAPI) -> None:
+    app.add_exception_handler(IntegrityError, integrity_exception_handler)
     app.add_exception_handler(AppException, app_exception_handler)
     app.add_exception_handler(
         RequestValidationError,
