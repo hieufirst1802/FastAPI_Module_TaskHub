@@ -1,12 +1,12 @@
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.concurrency import run_in_threadpool
 
-from app.core.exceptions import UsernameAlreadyExistsError
-from app.core.security import (
-    create_access_token,
-    hash_password,
-    verify_password,
-)
+from app.core.database import transaction
+from app.core.exceptions import UnauthorizedException, UsernameAlreadyExistsError
+from app.core.messages import INCORRECT_LOGIN
+from app.core.security import DUMMY_HASH, hash_password, verify_password
+from app.models.enums import UserRole
 from app.models.user import User
 from app.repositories.user import UserRepository
 
@@ -16,42 +16,23 @@ class AuthService:
         self.users = UserRepository(session)
         self.session = session
 
-    async def register(
-        self,
-        username: str,
-        password: str,
-    ) -> User:
-        existing_user = await self.users.by_username(username)
-
-        if existing_user is not None:
-            raise UsernameAlreadyExistsError()
+    async def register(self, username: str, password: str) -> User:
+        hashed_password = await run_in_threadpool(hash_password, password)
 
         try:
-            user = await self.users.create(
-                username=username,
-                password_hash=hash_password(password),
-                role="member",
-            )
+            async with transaction(self.session):
+                return await self.users.create(
+                    username=username, password_hash=hashed_password, role=UserRole.MEMBER
+                )
         except IntegrityError as exc:
-            await self.session.rollback()
-            raise UsernameAlreadyExistsError() from exc
+            if await self.users.by_username(username) is not None:
+                raise UsernameAlreadyExistsError() from exc
+            raise
 
-        return user
-
-    async def authenticate(
-        self,
-        username: str,
-        password: str,
-    ) -> User | None:
+    async def authenticate(self, username: str, password: str) -> User:
         user = await self.users.by_username(username)
-
-        if user is None:
-            return None
-
-        if not verify_password(password, user.password_hash):
-            return None
-
+        stored_hash = user.password_hash if user and user.is_active else DUMMY_HASH
+        valid_password = await run_in_threadpool(verify_password, password, stored_hash)
+        if user is None or not user.is_active or not valid_password:
+            raise UnauthorizedException(INCORRECT_LOGIN)
         return user
-
-    def create_token(self, user: User) -> str:
-        return create_access_token(subject=str(user.id))

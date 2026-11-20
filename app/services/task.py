@@ -1,73 +1,47 @@
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.database import transaction
+from app.core.exceptions import NotFoundException
+from app.core.messages import TASK_NOT_FOUND
+from app.models.enums import UserRole
 from app.models.task import Task
 from app.models.user import User
 from app.repositories.task import TaskRepository
+from app.schemas.pagination import PaginationParams
 from app.schemas.task import TaskCreate, TaskUpdate
 
 
 class TaskService:
-    def __init__(self, task_repository: TaskRepository) -> None:
-        self.task_repository = task_repository
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+        self.task_repository = TaskRepository(session)
 
     async def create(self, data: TaskCreate, current_user: User) -> Task:
-        return await self.task_repository.create(
-            **data.model_dump(),
-            owner_id=current_user.id,
-        )
+        async with transaction(self.session):
+            return await self.task_repository.create(**data.model_dump(), owner_id=current_user.id)
 
     async def page(
-        self,
-        offset: int,
-        limit: int,
-        current_user: User,
+        self, pagination: PaginationParams, current_user: User
     ) -> tuple[list[Task], int]:
-        if current_user.role == "admin":
-            return await self.task_repository.page(offset, limit)
+        if current_user.role == UserRole.ADMIN:
+            return await self.task_repository.page(pagination)
+        return await self.task_repository.page(pagination, Task.owner_id == current_user.id)
 
-        return await self.task_repository.page(
-            offset,
-            limit,
-            Task.owner_id == current_user.id,
-        )
-
-    async def get(
-        self,
-        identifier: int,
-        current_user: User,
-    ) -> Task | None:
-        if current_user.role == "admin":
-            return await self.task_repository.get(identifier)
-
-        return await self.task_repository.get_by_owner(
-            identifier,
-            current_user.id,
-        )
-
-    async def update(
-        self,
-        identifier: int,
-        data: TaskUpdate,
-        current_user: User,
-    ) -> Task | None:
-        task = await self.get(identifier, current_user)
-
+    async def get(self, task_id: int, current_user: User) -> Task:
+        if current_user.role == UserRole.ADMIN:
+            task = await self.task_repository.get(task_id)
+        else:
+            task = await self.task_repository.get_by_owner(task_id, current_user.id)
         if task is None:
-            return None
+            raise NotFoundException(TASK_NOT_FOUND)
+        return task
 
-        return await self.task_repository.update(
-            task,
-            data.model_dump(exclude_unset=True),
-        )
+    async def update(self, task_id: int, data: TaskUpdate, current_user: User) -> Task:
+        async with transaction(self.session):
+            task = await self.get(task_id, current_user)
+            return await self.task_repository.update(task, data.model_dump(exclude_unset=True))
 
-    async def delete(
-        self,
-        identifier: int,
-        current_user: User,
-    ) -> bool:
-        task = await self.get(identifier, current_user)
-
-        if task is None:
-            return False
-
-        await self.task_repository.delete(task)
-        return True
+    async def delete(self, task_id: int, current_user: User) -> None:
+        async with transaction(self.session):
+            task = await self.get(task_id, current_user)
+            await self.task_repository.delete(task)

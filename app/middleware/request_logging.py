@@ -1,43 +1,43 @@
 import logging
 from time import perf_counter
 
-from fastapi import Request
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
+from fastapi import status
+from starlette.datastructures import MutableHeaders
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-logger = logging.getLogger("app.request")
+logger = logging.getLogger(__name__)
 
 
-class RequestLoggingMiddleware(BaseHTTPMiddleware):
-    """Log request metadata and expose processing time in the response."""
+class RequestLoggingMiddleware:
+    """Log HTTP requests and add timing to the response headers."""
 
-    async def dispatch(
-        self,
-        request: Request,
-        call_next,
-    ) -> Response:
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
         started_at = perf_counter()
-        status_code = 500
+        status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+
+        async def send_with_timing(message: Message) -> None:
+            nonlocal status_code
+            if message["type"] == "http.response.start":
+                status_code = message["status"]
+                MutableHeaders(scope=message)["X-Process-Time"] = (
+                    f"{perf_counter() - started_at:.6f}"
+                )
+            await send(message)
 
         try:
-            response = await call_next(request)
-            status_code = response.status_code
-            elapsed = perf_counter() - started_at
-            response.headers["X-Process-Time"] = f"{elapsed:.6f}"
-            return response
-        except Exception:
-            logger.exception(
-                "Request failed: %s %s",
-                request.method,
-                request.url.path,
-            )
-            raise
+            await self.app(scope, receive, send_with_timing)
         finally:
-            elapsed = perf_counter() - started_at
             logger.info(
                 "%s %s %s %.6fs",
-                request.method,
-                request.url.path,
+                scope["method"],
+                scope["path"],
                 status_code,
-                elapsed,
+                perf_counter() - started_at,
             )

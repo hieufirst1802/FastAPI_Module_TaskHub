@@ -1,10 +1,11 @@
-# Bài 2 — Database & Layered Architecture
+# Bài 5 — Middleware và xử lý lỗi
 
-Nhánh thực hiện: `lesson-2-rework`
+Nhánh thực hiện: `lesson-5-middleware-exceptions`
 
 ## 1. Mục tiêu
 
-Mở rộng Bài 1 từ ứng dụng FastAPI sử dụng dữ liệu trong bộ nhớ thành ứng dụng có cơ sở dữ liệu lưu trữ lâu dài, sử dụng SQLAlchemy Async và Alembic.
+Mở rộng Bài 4 với phản hồi lỗi chuẩn hóa, log HTTP và thời gian xử lý request.
+Bộ kiểm thử tích hợp chạy trên SQLite.
 
 Các mục tiêu chính:
 
@@ -24,14 +25,28 @@ app/
 ├── api/
 │   └── v1/
 │       ├── endpoints/
+│       │   ├── auth.py
 │       │   ├── health.py
-│       │   └── tasks.py
+│       │   ├── tasks.py
+│       │   └── users.py
 │       └── router.py
 ├── core/
 │   ├── config.py
-│   └── database.py
+│   ├── constants.py
+│   ├── database.py
+│   ├── dependencies.py
+│   ├── enums.py
+│   ├── exception_handlers.py
+│   ├── exceptions.py
+│   ├── messages.py
+│   ├── permissions.py
+│   └── security.py
+├── middleware/
+│   ├── request_logging.py
+│   └── unhandled_errors.py
 ├── models/
 │   ├── base.py
+│   ├── enums.py
 │   ├── task.py
 │   └── user.py
 ├── repositories/
@@ -39,10 +54,14 @@ app/
 │   ├── task.py
 │   └── user.py
 ├── schemas/
+│   ├── auth.py
+│   ├── base.py
 │   ├── pagination.py
 │   └── task.py
 ├── services/
-│   └── task.py
+│   ├── auth.py
+│   ├── task.py
+│   └── user.py
 └── main.py
 
 migrations/
@@ -50,7 +69,14 @@ migrations/
 └── env.py
 
 tests/
-└── test_app.py
+├── conftest.py
+├── test_auth.py
+├── test_authorization.py
+├── test_day5.py
+├── test_health.py
+├── test_pagination.py
+├── test_persistence.py
+└── test_tasks.py
 ```
 
 ## 3. Công nghệ sử dụng
@@ -86,7 +112,7 @@ Mặc định sử dụng SQLite:
 
 `sqlite+aiosqlite:///./tasks.db`
 
-Khởi tạo database bằng migration:
+Sau khi thiết lập `JWT_SECRET_KEY` ở mục 6, cập nhật database bằng migration:
 
 ```powershell
 uv run alembic upgrade head
@@ -105,6 +131,14 @@ Cài đặt dependencies:
 
 ```powershell
 uv sync
+```
+
+Nếu chưa có `.env`, sao chép từ `.env.example`. Tạo khóa riêng bằng lệnh sau và đặt kết quả
+vào `JWT_SECRET_KEY` trong `.env`. Khóa có tối thiểu 32 ký tự. Thuật toán là `HS256` và
+`ACCESS_TOKEN_EXPIRE_MINUTES` mặc định là 30 phút.
+
+```powershell
+uv run python -c "import secrets; print(secrets.token_hex(32))"
 ```
 
 Khởi tạo database:
@@ -128,12 +162,21 @@ Truy cập:
 
 | Method | Endpoint | Chức năng |
 |---|---|---|
-| POST | `/api/tasks` | Tạo Task |
-| GET | `/api/tasks` | Lấy danh sách Task có phân trang |
-| GET | `/api/tasks/{identifier}` | Lấy chi tiết Task |
-| PATCH | `/api/tasks/{identifier}` | Cập nhật Task |
-| DELETE | `/api/tasks/{identifier}` | Xóa Task |
+| POST | `/api/v1/auth/register` | Đăng ký |
+| POST | `/api/v1/auth/login` | Đăng nhập và nhận access token |
+| GET | `/api/v1/auth/me` | Xem tài khoản hiện tại |
+| GET | `/api/v1/users` | Liệt kê tài khoản có phân trang, dành cho admin |
+| POST | `/api/v1/tasks` | Tạo Task |
+| GET | `/api/v1/tasks` | Lấy danh sách Task có phân trang |
+| GET | `/api/v1/tasks/{task_id}` | Lấy chi tiết Task |
+| PATCH | `/api/v1/tasks/{task_id}` | Cập nhật Task |
+| DELETE | `/api/v1/tasks/{task_id}` | Xóa Task |
 | GET | `/health` | Kiểm tra ứng dụng và database |
+
+Gửi `Authorization: Bearer <access_token>` cho các API yêu cầu đăng nhập. Member chỉ truy cập
+Task của mình. Admin có thể xem, cập nhật và xóa Task của mọi người dùng. Khi tạo Task, hệ thống
+lấy chủ sở hữu từ tài khoản đang đăng nhập. Đăng ký công khai luôn tạo tài khoản member.
+Migration vô hiệu hóa tài khoản demo cũ có mật khẩu `disabled-login` và giữ lại dữ liệu liên quan.
 
 API danh sách hỗ trợ:
 
@@ -141,7 +184,19 @@ API danh sách hỗ trợ:
 - `limit`: số bản ghi, mặc định 20, tối đa 100.
 - `total`: tổng số bản ghi.
 
-## 8. Kiểm thử và chất lượng mã nguồn
+## 8. Phản hồi lỗi và log HTTP
+
+Các lỗi trả về theo cấu trúc `{"error": {"code": "...", "message": "..."}}`.
+Ví dụ, `401` dùng mã `unauthorized`, `403` dùng `forbidden` và Task không tìm thấy dùng
+`not_found`. Lỗi xác thực giữ header `WWW-Authenticate: Bearer`. Chi tiết validation chỉ
+gồm `loc`, `msg` và `type`.
+
+`LOG_LEVEL` mặc định là `INFO`. Middleware ghi method, path, mã HTTP và thời gian xử lý.
+`X-Process-Time` đo thời gian đến lúc bắt đầu gửi header, kể cả đối với lỗi 500 phát sinh
+trước khi response bắt đầu. Nếu lỗi xảy ra sau khi bắt đầu streaming, mã trạng thái và header
+đã gửi sẽ giữ nguyên và máy chủ ASGI xử lý lỗi.
+
+## 9. Kiểm thử và chất lượng mã nguồn
 
 Chạy kiểm thử:
 
@@ -167,13 +222,3 @@ Kiểm tra đồng bộ database:
 ```powershell
 uv run alembic check
 ```
-
-## 9. Kết quả kiểm tra hiện tại
-
-- Ruff check: Passed.
-- Ruff format: Passed.
-- MyPy strict: Passed.
-- Pytest: 2 passed.
-- Alembic check: No new upgrade operations detected.
-
-Bài 2 kế thừa nền tảng CRUD và kiến trúc phân tầng của Bài 1, đồng thời bổ sung database persistence và quản lý schema bằng migration.
