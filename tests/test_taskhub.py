@@ -9,26 +9,16 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from test_app import prepare_database
-from test_day6 import MemoryRedis
 
 from app.core.cache import TaskCache
-from app.core.config import Settings
 from app.main import create_app
 from app.models.refresh_token import RefreshToken
 from app.models.user import User
 
 
 @pytest.fixture
-def hub(tmp_path, monkeypatch):
-    settings = Settings(
-        database_url=f"sqlite+aiosqlite:///{(tmp_path / 'hub.db').as_posix()}",
-        jwt_secret_key="test-specific-secret-which-is-long-enough",
-        redis_enabled=False,
-    )
-    prepare_database(settings)
-    redis = MemoryRedis()
-    cache = TaskCache(redis, prefix="test:hub")
+def hub(settings, redis, monkeypatch):
+    cache = TaskCache(redis, ttl=10, prefix="test:hub")
     monkeypatch.setattr(TaskCache, "from_settings", classmethod(lambda cls, config: cache))
     with TestClient(create_app(settings)) as client:
         users = {}
@@ -230,7 +220,7 @@ def test_workspace_rbac_and_owner_invariants(hub):
     assert (
         c.get(f"/api/v1/workspaces/{wid}", headers=users["outsider"]["headers"]).status_code == 404
     )
-    assert c.get("/api/v1/workspaces", headers=users["outsider"]["headers"]).json() == []
+    assert c.get("/api/v1/workspaces", headers=users["outsider"]["headers"]).json()["items"] == []
     assert c.get(f"/api/v1/projects/{pid}", headers=users["admin"]["headers"]).status_code == 200
     assert (
         c.delete(
@@ -346,7 +336,7 @@ def test_labels_comments_and_cross_project_isolation(hub):
         == 403
     )
     assert c.delete(f"/api/v1/comments/{cid}", headers=e).status_code == 403
-    assert len(c.get(f"/api/v1/tasks/{tid}/comments", headers=v).json()) == 1
+    assert len(c.get(f"/api/v1/tasks/{tid}/comments", headers=v).json()["items"]) == 1
     assert c.delete(f"/api/v1/comments/{cid}", headers=h).status_code == 204
     assert (
         c.patch(
@@ -440,13 +430,12 @@ def test_inactive_user_and_unique_email(hub):
         ).status_code
         == 200
     )
-    assert (
-        c.post(
-            "/api/v1/auth/register",
-            json={"username": "another", "password": "Password123!", "email": "new@example.com"},
-        ).status_code
-        == 409
+    duplicate = c.post(
+        "/api/v1/auth/register",
+        json={"username": "another", "password": "Password123!", "email": "new@example.com"},
     )
+    assert duplicate.status_code == 409
+    assert duplicate.json()["error"]["code"] == "email_already_exists"
 
     async def deactivate():
         engine = create_async_engine(settings.database_url)
@@ -502,3 +491,32 @@ def test_project_list_cache_hit_expiration_and_delete(hub, monkeypatch):
     assert len(calls) == 3
     assert c.delete(f"/api/v1/projects/{pid}", headers=h).status_code == 204
     assert c.get(url, headers=h).status_code == 404
+
+
+def test_domain_lists_use_shared_pagination(hub):
+    client, users, *_ = hub
+    headers = users["owner"]["headers"]
+    wid, pid = seed(hub)
+    task = client.post(f"/api/v1/projects/{pid}/tasks", json={"title": "Task"}, headers=headers)
+    assert task.status_code == 201
+    tid = task.json()["id"]
+    comments_url = f"/api/v1/tasks/{tid}/comments"
+    assert (
+        client.post(comments_url, json={"content": "Comment"}, headers=headers).status_code == 201
+    )
+
+    for url in (
+        "/api/v1/workspaces",
+        f"/api/v1/workspaces/{wid}/projects",
+        f"/api/v1/projects/{pid}/tasks",
+        comments_url,
+    ):
+        first = client.get(url, params={"limit": 1}, headers=headers)
+        assert first.status_code == 200
+        page = first.json()
+        assert len(page["items"]) == page["total"] == page["page"] == page["limit"] == 1
+
+        second = client.get(url, params={"page": 2, "limit": 1}, headers=headers)
+        assert second.status_code == 200
+        assert second.json() == {"items": [], "total": 1, "page": 2, "limit": 1}
+        assert client.get(url, params={"limit": 101}, headers=headers).status_code == 422

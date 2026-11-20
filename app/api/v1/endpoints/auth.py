@@ -1,9 +1,11 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 
 from app.core.database import Session
 from app.core.dependencies import CurrentUser
+from app.core.exceptions import UnauthorizedException
+from app.core.messages import INCORRECT_LOGIN
 from app.schemas.auth import (
     LoginRequest,
     PasswordChange,
@@ -14,7 +16,7 @@ from app.schemas.auth import (
 )
 from app.services.auth import AuthService
 
-router = APIRouter(prefix="/api/auth", tags=["Authentication"])
+router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
 def get_auth_service(session: Session, request: Request) -> AuthService:
@@ -59,11 +61,7 @@ async def login(
     )
 
     if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise UnauthorizedException(INCORRECT_LOGIN)
 
     return await service.issue_tokens(user)
 

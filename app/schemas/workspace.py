@@ -3,9 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-WorkspaceRole = Literal["OWNER", "EDITOR", "VIEWER"]
-TaskStatus = Literal["TODO", "IN_PROGRESS", "IN_REVIEW", "DONE"]
-Priority = Literal["LOW", "MEDIUM", "HIGH", "URGENT"]
+from app.enums import Priority, ProjectStatus, TaskStatus, WorkspaceRole
 
 
 class Input(BaseModel):
@@ -18,11 +16,11 @@ class Named(Input):
 
 class MemberInput(Input):
     user_id: int = Field(gt=0)
-    role: Literal["EDITOR", "VIEWER"] = "VIEWER"
+    role: Literal[WorkspaceRole.EDITOR, WorkspaceRole.VIEWER] = WorkspaceRole.VIEWER
 
 
 class MemberUpdate(Input):
-    role: Literal["EDITOR", "VIEWER"]
+    role: Literal[WorkspaceRole.EDITOR, WorkspaceRole.VIEWER]
 
 
 class ProjectInput(Named):
@@ -32,7 +30,7 @@ class ProjectInput(Named):
 class ProjectUpdate(Input):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=10000)
-    status: Literal["ACTIVE", "ARCHIVED"] | None = None
+    status: ProjectStatus | None = None
 
     @model_validator(mode="after")
     def non_null(self) -> "ProjectUpdate":
@@ -54,8 +52,8 @@ class ProjectTaskCreate(Input):
     title: str = Field(min_length=1, max_length=200)
     description: str = Field(default="", max_length=10000)
     assignee_id: int | None = Field(default=None, gt=0)
-    status: TaskStatus = "TODO"
-    priority: Priority = "MEDIUM"
+    status: TaskStatus = TaskStatus.TODO
+    priority: Priority = Priority.MEDIUM
     due_date: datetime | None = None
 
 
@@ -97,7 +95,7 @@ class ProjectOut(Output):
     workspace_id: int
     name: str
     description: str
-    status: str
+    status: ProjectStatus
     created_at: datetime
 
 
@@ -123,14 +121,7 @@ class ProjectTaskOut(Output):
     assignee_id: int | None
     title: str
     description: str
-    status: str
-    priority: str
+    status: TaskStatus
+    priority: Priority
     due_date: datetime | None
     created_at: datetime
-
-
-class ProjectTaskPage(BaseModel):
-    items: list[ProjectTaskOut]
-    total: int
-    page: int
-    limit: int

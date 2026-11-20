@@ -3,21 +3,21 @@
 import logging
 from uuid import uuid4
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 from redis.asyncio import Redis
 from redis.asyncio.retry import Retry
 from redis.backoff import NoBackoff
 from redis.exceptions import RedisError
 
 from app.core.config import Settings
-from app.schemas.task import TaskOut
-from app.schemas.workspace import ProjectTaskPage
+from app.enums import Priority, TaskStatus
 
 logger = logging.getLogger(__name__)
+VERSION_TTL_MULTIPLIER = 2
 
 
 class TaskCache:
-    def __init__(self, client: Redis | None, ttl: int = 60, prefix: str = "taskhub:v1") -> None:
+    def __init__(self, client: Redis | None, ttl: int, prefix: str) -> None:
         self.client = client
         self.ttl = ttl
         self.prefix = prefix
@@ -35,43 +35,74 @@ class TaskCache:
             )
         return cls(client, settings.redis_cache_ttl, settings.redis_key_prefix)
 
-    def key(self, identifier: int) -> str:
-        return f"{self.prefix}:tasks:{identifier}"
+    def task_version_key(self, task_id: int) -> str:
+        return f"{self.prefix}:tasks:{task_id}:version"
 
-    async def get(self, identifier: int) -> TaskOut | None:
+    def task_detail_key(self, task_id: int, version: str) -> str:
+        return f"{self.prefix}:tasks:{task_id}:standalone:{version}"
+
+    def project_version_key(self, project_id: int) -> str:
+        return f"{self.prefix}:projects:{project_id}:version"
+
+    def project_page_key(
+        self,
+        project_id: int,
+        version: str,
+        page: int,
+        limit: int,
+        status: TaskStatus | None,
+        priority: Priority | None,
+        assignee_id: int | None,
+    ) -> str:
+        return f"{self.prefix}:projects:{project_id}:tasks:{version}:{page}:{limit}:{status}:{priority}:{assignee_id}"
+
+    async def version(self, key: str) -> str | None:
         if self.client is None:
             return None
         try:
-            payload = await self.client.get(self.key(identifier))
-            if payload is None:
-                return None
-            task = TaskOut.model_validate_json(payload)
-            if task.id != identifier:
-                await self.invalidate(identifier)
-                return None
-            return task
-        except ValidationError:
-            logger.warning("Invalid task cache payload; loading database")
-            await self.invalidate(identifier)
+            current = await self.client.get(key)
+            if isinstance(current, str):
+                return current
+            initial = uuid4().hex
+            if await self.client.set(key, initial, ex=self.ttl * VERSION_TTL_MULTIPLIER, nx=True):
+                return initial
+            current = await self.client.get(key)
+            return current if isinstance(current, str) else None
         except (RedisError, OSError):
-            logger.warning("Redis read unavailable; loading database")
-        return None
+            logger.warning("Redis version unavailable; loading database")
+            return None
 
-    async def set(self, task: TaskOut) -> None:
+    async def bump_version(self, key: str) -> None:
         if self.client is None:
             return
         try:
-            await self.client.set(self.key(task.id), task.model_dump_json(), ex=self.ttl)
+            await self.client.set(key, uuid4().hex, ex=self.ttl * VERSION_TTL_MULTIPLIER)
+        except (RedisError, OSError):
+            logger.warning("Redis invalidation unavailable; stale entries expire by TTL")
+
+    async def invalidate(self, task_id: int) -> None:
+        await self.bump_version(self.task_version_key(task_id))
+
+    async def invalidate_project(self, project_id: int) -> None:
+        await self.bump_version(self.project_version_key(project_id))
+
+    async def get[T: BaseModel](self, key: str, schema: type[T]) -> T | None:
+        if self.client is None:
+            return None
+        try:
+            payload = await self.client.get(key)
+            return schema.model_validate_json(payload) if payload is not None else None
+        except (RedisError, OSError, ValidationError):
+            logger.warning("Cache unavailable or invalid; loading database")
+            return None
+
+    async def set(self, key: str, value: BaseModel) -> None:
+        if self.client is None:
+            return
+        try:
+            await self.client.set(key, value.model_dump_json(), ex=self.ttl)
         except (RedisError, OSError):
             logger.warning("Redis write unavailable; skipping cache")
-
-    async def invalidate(self, identifier: int) -> None:
-        if self.client is None:
-            return
-        try:
-            await self.client.delete(self.key(identifier))
-        except (RedisError, OSError):
-            logger.warning("Redis invalidation unavailable; stale entry expires by TTL")
 
     async def close(self) -> None:
         if self.client is not None:
@@ -79,39 +110,3 @@ class TaskCache:
                 await self.client.aclose()
             except (RedisError, OSError):
                 logger.warning("Redis close failed")
-
-    async def project_version(self, pid: int) -> str | None:
-        if self.client is None:
-            return None
-        try:
-            return await self.client.get(f"{self.prefix}:projects:{pid}:version") or "0"
-        except (RedisError, OSError):
-            logger.warning("Redis version unavailable; loading database")
-            return None
-
-    async def invalidate_project(self, pid: int) -> None:
-        if self.client is None:
-            return
-        try:
-            await self.client.set(
-                f"{self.prefix}:projects:{pid}:version", uuid4().hex, ex=self.ttl * 2
-            )
-        except (RedisError, OSError):
-            logger.warning("Redis project invalidation failed; stale entries expire by TTL")
-
-    async def get_page(self, key: str) -> ProjectTaskPage | None:
-        if self.client is None:
-            return None
-        try:
-            payload = await self.client.get(key)
-            return ProjectTaskPage.model_validate_json(payload) if payload is not None else None
-        except (ValidationError, RedisError, OSError):
-            logger.warning("Project cache unavailable or invalid; loading database")
-            return None
-
-    async def set_page(self, key: str, page: ProjectTaskPage) -> None:
-        if self.client is not None:
-            try:
-                await self.client.set(key, page.model_dump_json(), ex=self.ttl)
-            except (RedisError, OSError):
-                logger.warning("Redis project cache write failed")

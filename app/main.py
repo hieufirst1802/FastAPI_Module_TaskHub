@@ -1,3 +1,4 @@
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -11,6 +12,7 @@ from app.core.cache import TaskCache
 from app.core.config import Settings, get_settings
 from app.core.exception_handlers import register_exception_handlers
 from app.middleware.request_logging import RequestLoggingMiddleware
+from app.middleware.unhandled_errors import UnhandledErrorMiddleware
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -18,6 +20,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        logging.basicConfig(level=config.log_level)
+        logging.getLogger("app").setLevel(config.log_level)
         engine = create_async_engine(
             config.database_url,
             pool_pre_ping=True,
@@ -55,6 +59,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
 
+    app.add_middleware(UnhandledErrorMiddleware)
     app.add_middleware(RequestLoggingMiddleware)
     register_exception_handlers(app)
     app.include_router(router)

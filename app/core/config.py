@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -13,7 +14,8 @@ class Settings(BaseSettings):
     environment: str = "development"
     database_url: str = "sqlite+aiosqlite:///./tasks.db"
 
-    redis_enabled: bool = True
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
+    redis_enabled: bool = False
     redis_url: str = "redis://localhost:6379/0"
     redis_cache_ttl: int = Field(default=60, ge=1)
     redis_socket_timeout: float = Field(default=0.2, gt=0)

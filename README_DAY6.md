@@ -81,7 +81,7 @@ Các biến môi trường sau được sử dụng để điều khiển hoạt
 
 | Biến môi trường | Giá trị mặc định | Mô tả |
 |---|---|---|
-| REDIS_ENABLED | true | Bật hoặc tắt Redis Caching |
+| REDIS_ENABLED | false | Bật hoặc tắt Redis Caching |
 | REDIS_URL | redis://localhost:6379/0 | URL kết nối Redis |
 | REDIS_CACHE_TTL | 60 | Thời gian hết hạn của Cache, tính bằng giây |
 | REDIS_SOCKET_TIMEOUT | 0.2 | Thời gian chờ tối đa cho kết nối và thao tác Redis |
@@ -122,12 +122,12 @@ Project Version Key được sử dụng để vô hiệu hóa các danh sách T
 
 ### 5.2. Cache thông tin chi tiết Task
 
-Thông tin chi tiết Task cũng được lưu trong Redis dưới dạng String chứa dữ liệu JSON đã được tuần tự hóa.
+Chi tiết Task độc lập được lưu trong Redis dưới dạng JSON. Chi tiết Task thuộc Project đọc database và kiểm tra quyền Workspace ở mỗi lần truy cập.
 
 Định dạng Redis Key:
 
 ```text
-taskhub:v1:tasks:{task_id}
+taskhub:v1:tasks:{task_id}:standalone:{version}
 ```
 
 Quy trình Cache-aside:
@@ -148,7 +148,7 @@ Cơ chế vô hiệu hóa Cache giúp đảm bảo dữ liệu Cache không bị
 
 Các cơ chế được triển khai:
 
-- Vô hiệu hóa Cache chi tiết Task sau khi thao tác Update hoặc Delete được Database Commit thành công.
+- Đổi phiên bản cache chi tiết sau khi database commit thành công. Lượt đọc chậm chỉ ghi vào key phiên bản cũ.
 - Vô hiệu hóa Cache danh sách Task của Project sau các thay đổi liên quan đến Task trong Project.
 - Giữ nguyên Cache hợp lệ nếu thao tác ghi dữ liệu vào Database thất bại.
 - Sử dụng TTL để giới hạn thời gian tồn tại của dữ liệu Cache cũ.

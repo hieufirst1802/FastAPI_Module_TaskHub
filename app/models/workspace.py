@@ -1,8 +1,18 @@
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, Text, UniqueConstraint, func
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    Enum,
+    ForeignKey,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.enums import ProjectStatus, WorkspaceRole
 from app.models.base import Base
 
 
@@ -21,7 +31,7 @@ class WorkspaceMember(Base):
     )
     workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id"), primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
-    role: Mapped[str] = mapped_column(String(10))
+    role: Mapped[WorkspaceRole] = mapped_column(Enum(WorkspaceRole, native_enum=False, length=10))
 
 
 class Project(Base):
@@ -31,7 +41,9 @@ class Project(Base):
     workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id"), index=True)
     name: Mapped[str] = mapped_column(String(200))
     description: Mapped[str] = mapped_column(Text, default="")
-    status: Mapped[str] = mapped_column(String(10), default="ACTIVE")
+    status: Mapped[ProjectStatus] = mapped_column(
+        Enum(ProjectStatus, native_enum=False, length=10), default=ProjectStatus.ACTIVE
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

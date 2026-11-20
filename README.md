@@ -1,6 +1,6 @@
 # TaskHub – Workspace, Authentication và RBAC
 
-FastAPI + SQLAlchemy async + Alembic + JWT access/refresh + Redis async. Giữ kiến trúc API → Service → Repository → Database. API cũ `/api/auth`, `/api/tasks`, `/api/users` vẫn hoạt động; domain Workspace dùng `/api/v1`.
+FastAPI + SQLAlchemy async + Alembic + JWT access/refresh + Redis async. Giữ kiến trúc API → Service → Repository → Database. Xác thực và Workspace dùng `/api/v1`. Các API `/api/tasks` và `/api/users` tiếp tục phục vụ client cũ.
 
 ## Chạy local
 
@@ -15,7 +15,7 @@ docker compose up -d redis
 uv run uvicorn app.main:create_app --factory --reload
 ```
 
-Không dùng Redis: đặt `REDIS_ENABLED=false` và bỏ lệnh Docker. Swagger: http://localhost:8000/docs; ReDoc: http://localhost:8000/redoc; health: http://localhost:8000/health. Cài bằng pip nếu cần: `python -m pip install -r requirements.txt`; dev tools: `python -m pip install pytest pytest-asyncio httpx ruff mypy`.
+Redis mặc định tắt khi chạy local. Đặt `REDIS_ENABLED=true` trong `.env` nếu chạy lệnh Docker để bật cache. Swagger: http://localhost:8000/docs; ReDoc: http://localhost:8000/redoc; health: http://localhost:8000/health. Cài bằng pip nếu cần: `python -m pip install -r requirements.txt`; dev tools: `python -m pip install pytest pytest-asyncio httpx ruff mypy`.
 
 ## Docker Compose
 
@@ -63,6 +63,7 @@ Assignee phải là user active thuộc Workspace. Xóa membership tự gỡ ass
 | POST | `/api/v1/auth/refresh` | Đổi refresh_token thành cặp token mới |
 | POST | `/api/v1/auth/logout` | Revoke refresh_token trong body |
 | POST | `/api/v1/auth/change-password` | current_password, new_password; cần Bearer |
+| GET | `/api/v1/auth/me` | Tài khoản hiện tại |
 | GET/PATCH | `/api/v1/users/me` | Profile |
 | POST/GET | `/api/v1/workspaces` | Tạo/liệt kê |
 | GET/PATCH/DELETE | `/api/v1/workspaces/{wid}` | Workspace CRUD |
@@ -81,6 +82,8 @@ Assignee phải là user active thuộc Workspace. Xóa membership tự gỡ ass
 
 Task status: TODO/IN_PROGRESS/IN_REVIEW/DONE; priority: LOW/MEDIUM/HIGH/URGENT. Danh sách task hỗ trợ `?status=TODO&priority=HIGH&assignee_id=2&page=1&limit=20`. `page >= 1`, `1 <= limit <= 100`. PATCH cho phép `assignee_id=null` và `due_date=null` để xóa; các field khác không nhận null. Gửi due_date theo ISO 8601 UTC.
 
+Danh sách Workspace, Project, Task trong Project và Comment trả `{items, total, page, limit}`.
+
 Swagger: đăng ký → đăng nhập → Authorize bằng access_token → tạo Workspace → mời user → tạo Project → tạo task. Refresh/logout nhận `{"refresh_token":"..."}`. Refresh thành công làm token cũ hết hiệu lực; client phải lưu cặp mới. Logout chỉ revoke refresh token được gửi; access token đã phát vẫn sống đến TTL (mặc định 30 phút). Refresh token không dùng được như Bearer access token.
 
 ## Kiến trúc và dữ liệu cũ
@@ -97,7 +100,7 @@ Sao lưu trước migration. Upgrade thêm schema và backfill task completed th
 
 Xem `.env.example`: DATABASE_URL, JWT_SECRET_KEY, JWT_ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES, REFRESH_TOKEN_EXPIRE_DAYS, REDIS_ENABLED, REDIS_URL, REDIS_CACHE_TTL, REDIS_SOCKET_TIMEOUT, REDIS_KEY_PREFIX. Dùng namespace Redis riêng cho từng database/môi trường.
 
-Client Redis theo lifespan, không retry; lỗi Redis ghi warning và API dùng database. Key danh sách task gồm Project ID, generation, bộ lọc và phân trang. Sau create/update/delete, generation đổi thành UUID; key trang cũ không được dùng lại và TTL tự dọn. TTL generation gấp đôi TTL dữ liệu. Cache best-effort: invalidation thất bại có thể cũ đến TTL; chưa có outbox/lock chống stampede. Authentication/membership không cache. Redis không lưu password/token.
+Client Redis theo lifespan. Khi Redis lỗi, API đọc database và ghi warning. Cache lưu chi tiết Task độc lập và danh sách Task theo Project. Chi tiết Task thuộc Project luôn đọc DB và kiểm tra quyền. Key danh sách gồm Project ID, phiên bản, bộ lọc và phân trang. Sau khi commit thay đổi, phiên bản liên quan đổi sang UUID mới. Một lượt đọc chậm chỉ có thể ghi vào phiên bản cũ. TTL phiên bản gấp đôi TTL dữ liệu. Nếu Redis lỗi khi cập nhật phiên bản, dữ liệu cũ có thể còn được đọc đến hết TTL. Authentication/membership không cache. Redis không lưu password/token.
 
 ## Kiểm thử và giới hạn
 
@@ -112,4 +115,4 @@ git diff --check
 
 Tests dùng SQLite và Redis giả có đồng hồ TTL điều khiển được. Có kiểm thử cache hit/miss/expiration/giảm truy vấn/invalidation/lỗi Redis; JWT rotation/concurrency; profile; RBAC và thu hồi quyền; task/label/comment; cascade; API cũ; migration nâng/hạ/nâng giữ dữ liệu cũ và kiểm tra schema drift.
 
-PostgreSQL/Redis thật và Docker build chưa được chạy vì Docker Engine trên máy thực hiện chưa bật. Chức năng gửi email/background notification trong phụ lục chưa thuộc đợt bổ sung này; không có SMTP được cấu hình. Kết quả xác nhận xem [VALIDATION.md](VALIDATION.md). Tài liệu Redis ban đầu: [README_DAY6.md](README_DAY6.md).
+Chi tiết thiết kế cache xem [README_DAY6.md](README_DAY6.md).

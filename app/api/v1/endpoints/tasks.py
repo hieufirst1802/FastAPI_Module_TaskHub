@@ -1,7 +1,8 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Depends, Query, Request, Response
 
+from app.api.v1.dependencies import WorkspaceServiceDep
 from app.core.database import Session
 from app.core.dependencies import CurrentUser
 from app.models.task import Task
@@ -13,13 +14,15 @@ from app.services.task import TaskService
 router = APIRouter(prefix="/api/tasks", tags=["Tasks"])
 
 
-def get_task_service(session: Session, request: Request) -> TaskService:
+def get_task_service(
+    session: Session, request: Request, workspace: WorkspaceServiceDep
+) -> TaskService:
     task_repository = TaskRepository(session)
 
-    return TaskService(task_repository, request.app.state.task_cache)
+    return TaskService(task_repository, workspace, request.app.state.task_cache)
 
 
-def to_task_out(task: Task | TaskOut) -> TaskOut:
+def to_task_out(task: Task) -> TaskOut:
     return TaskOut.model_validate(task)
 
 
@@ -62,12 +65,7 @@ async def read(
     service: TaskServiceDependency,
     current_user: CurrentUser,
 ) -> TaskOut:
-    task = await service.get(identifier, current_user)
-
-    if task is None:
-        raise HTTPException(status_code=404, detail="Task not found")
-
-    return to_task_out(task)
+    return await service.get(identifier, current_user)
 
 
 @router.patch("/{identifier}", response_model=TaskOut)
@@ -79,9 +77,6 @@ async def update(
 ) -> TaskOut:
     task = await service.update(identifier, data, current_user)
 
-    if task is None:
-        raise HTTPException(status_code=404, detail="Task not found")
-
     return to_task_out(task)
 
 
@@ -91,9 +86,6 @@ async def delete(
     service: TaskServiceDependency,
     current_user: CurrentUser,
 ) -> Response:
-    deleted = await service.delete(identifier, current_user)
-
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Task not found")
+    await service.delete(identifier, current_user)
 
     return Response(status_code=204)

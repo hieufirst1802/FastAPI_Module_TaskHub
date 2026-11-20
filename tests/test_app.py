@@ -1,5 +1,4 @@
 import asyncio
-from pathlib import Path
 
 from fastapi.testclient import TestClient
 from sqlalchemy import text
@@ -7,19 +6,6 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.core.config import Settings
 from app.main import create_app
-from app.models import Base
-
-
-def prepare_database(settings: Settings) -> None:
-    async def create_schema() -> None:
-        engine = create_async_engine(settings.database_url)
-        try:
-            async with engine.begin() as connection:
-                await connection.run_sync(Base.metadata.create_all)
-        finally:
-            await engine.dispose()
-
-    asyncio.run(create_schema())
 
 
 def update_user_role(
@@ -42,16 +28,14 @@ def update_user_role(
     asyncio.run(update_role())
 
 
-def test_crud_validation_and_pagination(tmp_path: Path) -> None:
-    settings = Settings(database_url=f"sqlite+aiosqlite:///{(tmp_path / 'test.db').as_posix()}")
-    prepare_database(settings)
+def test_crud_validation_and_pagination(settings: Settings) -> None:
 
     with TestClient(create_app(settings)) as client:
         assert client.get("/health").json() == {"status": "ok"}
 
         # Register and login
         registered = client.post(
-            "/api/auth/register",
+            "/api/v1/auth/register",
             json={
                 "username": "cruduser",
                 "password": "CrudPassword123!",
@@ -60,7 +44,7 @@ def test_crud_validation_and_pagination(tmp_path: Path) -> None:
         assert registered.status_code == 201
 
         login = client.post(
-            "/api/auth/login",
+            "/api/v1/auth/login",
             json={
                 "username": "cruduser",
                 "password": "CrudPassword123!",
@@ -167,15 +151,11 @@ def test_crud_validation_and_pagination(tmp_path: Path) -> None:
         assert client.get("/openapi.json").status_code == 200
 
 
-def test_database_persistence_across_app_restart(tmp_path: Path) -> None:
-    settings = Settings(
-        database_url=f"sqlite+aiosqlite:///{(tmp_path / 'persistent.db').as_posix()}"
-    )
-    prepare_database(settings)
+def test_database_persistence_across_app_restart(settings: Settings) -> None:
 
     with TestClient(create_app(settings)) as client:
         registered = client.post(
-            "/api/auth/register",
+            "/api/v1/auth/register",
             json={
                 "username": "persistentuser",
                 "password": "PersistentPassword123!",
@@ -184,7 +164,7 @@ def test_database_persistence_across_app_restart(tmp_path: Path) -> None:
         assert registered.status_code == 201
 
         login = client.post(
-            "/api/auth/login",
+            "/api/v1/auth/login",
             json={
                 "username": "persistentuser",
                 "password": "PersistentPassword123!",
@@ -205,7 +185,7 @@ def test_database_persistence_across_app_restart(tmp_path: Path) -> None:
     # Restart application
     with TestClient(create_app(settings)) as client:
         login = client.post(
-            "/api/auth/login",
+            "/api/v1/auth/login",
             json={
                 "username": "persistentuser",
                 "password": "PersistentPassword123!",
@@ -224,14 +204,12 @@ def test_database_persistence_across_app_restart(tmp_path: Path) -> None:
         assert response.json()["title"] == "Persistent task"
 
 
-def test_authentication_flow(tmp_path: Path) -> None:
-    settings = Settings(database_url=f"sqlite+aiosqlite:///{(tmp_path / 'auth.db').as_posix()}")
-    prepare_database(settings)
+def test_authentication_flow(settings: Settings) -> None:
 
     with TestClient(create_app(settings)) as client:
         # 1. Register successfully
         registered = client.post(
-            "/api/auth/register",
+            "/api/v1/auth/register",
             json={
                 "username": "authuser",
                 "password": "TestPassword123!",
@@ -248,7 +226,7 @@ def test_authentication_flow(tmp_path: Path) -> None:
 
         # 2. Reject duplicate username
         duplicate = client.post(
-            "/api/auth/register",
+            "/api/v1/auth/register",
             json={
                 "username": "authuser",
                 "password": "AnotherPassword123!",
@@ -259,7 +237,7 @@ def test_authentication_flow(tmp_path: Path) -> None:
 
         # 3. Reject invalid registration data
         invalid = client.post(
-            "/api/auth/register",
+            "/api/v1/auth/register",
             json={
                 "username": "ab",
                 "password": "123",
@@ -270,7 +248,7 @@ def test_authentication_flow(tmp_path: Path) -> None:
 
         # 4. Reject incorrect password
         wrong_login = client.post(
-            "/api/auth/login",
+            "/api/v1/auth/login",
             json={
                 "username": "authuser",
                 "password": "WrongPassword123!",
@@ -281,7 +259,7 @@ def test_authentication_flow(tmp_path: Path) -> None:
 
         # 5. Login successfully
         login = client.post(
-            "/api/auth/login",
+            "/api/v1/auth/login",
             json={
                 "username": "authuser",
                 "password": "TestPassword123!",
@@ -297,28 +275,26 @@ def test_authentication_flow(tmp_path: Path) -> None:
         headers = {"Authorization": f"Bearer {token_data['access_token']}"}
 
         # 6. Access current user with valid token
-        me = client.get("/api/auth/me", headers=headers)
+        me = client.get("/api/v1/auth/me", headers=headers)
 
         assert me.status_code == 200
         assert me.json()["id"] == user["id"]
         assert me.json()["username"] == "authuser"
 
         # 7. Reject missing token
-        missing_token = client.get("/api/auth/me")
+        missing_token = client.get("/api/v1/auth/me")
         assert missing_token.status_code == 401
 
         # 8. Reject invalid token
         invalid_token = client.get(
-            "/api/auth/me",
+            "/api/v1/auth/me",
             headers={"Authorization": "Bearer invalid-token"},
         )
 
         assert invalid_token.status_code == 401
 
 
-def test_user_rbac(tmp_path: Path) -> None:
-    settings = Settings(database_url=f"sqlite+aiosqlite:///{(tmp_path / 'rbac.db').as_posix()}")
-    prepare_database(settings)
+def test_user_rbac(settings: Settings) -> None:
 
     with TestClient(create_app(settings)) as client:
         # 1. Anonymous user must be rejected
@@ -327,7 +303,7 @@ def test_user_rbac(tmp_path: Path) -> None:
 
         # 2. Register a member
         member = client.post(
-            "/api/auth/register",
+            "/api/v1/auth/register",
             json={
                 "username": "memberuser",
                 "password": "MemberPassword123!",
@@ -337,7 +313,7 @@ def test_user_rbac(tmp_path: Path) -> None:
 
         # 3. Login as member
         member_login = client.post(
-            "/api/auth/login",
+            "/api/v1/auth/login",
             json={
                 "username": "memberuser",
                 "password": "MemberPassword123!",
@@ -357,7 +333,7 @@ def test_user_rbac(tmp_path: Path) -> None:
 
         # 5. Register another user, then promote it to admin
         admin = client.post(
-            "/api/auth/register",
+            "/api/v1/auth/register",
             json={
                 "username": "adminuser",
                 "password": "AdminPassword123!",
@@ -369,7 +345,7 @@ def test_user_rbac(tmp_path: Path) -> None:
 
         # 6. Login as admin
         admin_login = client.post(
-            "/api/auth/login",
+            "/api/v1/auth/login",
             json={
                 "username": "adminuser",
                 "password": "AdminPassword123!",
@@ -398,11 +374,7 @@ def test_user_rbac(tmp_path: Path) -> None:
             assert "password_hash" not in user
 
 
-def test_task_ownership_and_admin_access(tmp_path: Path) -> None:
-    settings = Settings(
-        database_url=f"sqlite+aiosqlite:///{(tmp_path / 'ownership.db').as_posix()}"
-    )
-    prepare_database(settings)
+def test_task_ownership_and_admin_access(settings: Settings) -> None:
 
     with TestClient(create_app(settings)) as client:
         # 1. Anonymous user cannot access tasks
@@ -412,7 +384,7 @@ def test_task_ownership_and_admin_access(tmp_path: Path) -> None:
         # 2. Register two members
         for username in ("member_a", "member_b"):
             response = client.post(
-                "/api/auth/register",
+                "/api/v1/auth/register",
                 json={
                     "username": username,
                     "password": "MemberPassword123!",
@@ -423,7 +395,7 @@ def test_task_ownership_and_admin_access(tmp_path: Path) -> None:
         # 3. Login both members
         def login(username: str) -> dict[str, str]:
             response = client.post(
-                "/api/auth/login",
+                "/api/v1/auth/login",
                 json={
                     "username": username,
                     "password": "MemberPassword123!",

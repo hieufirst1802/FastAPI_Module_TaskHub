@@ -1,34 +1,15 @@
-import asyncio
-from pathlib import Path
+import sqlite3
 
 from fastapi.testclient import TestClient
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.exc import IntegrityError
 
 from app.core.config import Settings
 from app.main import create_app
-from app.models import Base
-
-
-def prepare_database(settings: Settings) -> None:
-    async def create_schema() -> None:
-        engine = create_async_engine(settings.database_url)
-        try:
-            async with engine.begin() as connection:
-                await connection.run_sync(Base.metadata.create_all)
-        finally:
-            await engine.dispose()
-
-    asyncio.run(create_schema())
-
-
-def make_settings(tmp_path: Path) -> Settings:
-    return Settings(database_url=f"sqlite+aiosqlite:///{(tmp_path / 'day5.db').as_posix()}")
 
 
 def test_request_logging_middleware_adds_process_time_header(
-    tmp_path: Path,
+    settings: Settings,
 ) -> None:
-    settings = make_settings(tmp_path)
 
     with TestClient(create_app(settings)) as client:
         response = client.get("/health")
@@ -38,14 +19,31 @@ def test_request_logging_middleware_adds_process_time_header(
     assert float(response.headers["X-Process-Time"]) >= 0
 
 
+def test_unexpected_integrity_error_is_logged_as_server_error(settings, caplog):
+    app = create_app(settings)
+
+    @app.get("/test-unexpected-integrity")
+    async def unexpected_integrity_error() -> None:
+        raise IntegrityError(None, None, sqlite3.IntegrityError("NOT NULL constraint failed"))
+
+    with TestClient(app) as client:
+        response = client.get("/test-unexpected-integrity")
+
+    assert response.status_code == 500
+    assert response.json()["error"]["code"] == "internal_server_error"
+    assert "NOT NULL" not in response.text
+    errors = [record for record in caplog.records if record.name == "app.core.exception_handlers"]
+    assert len(errors) == 1
+    assert errors[0].exc_info[0] is IntegrityError
+
+
 def test_validation_exception_handler_returns_standard_error(
-    tmp_path: Path,
+    settings: Settings,
 ) -> None:
-    settings = make_settings(tmp_path)
 
     with TestClient(create_app(settings)) as client:
         response = client.post(
-            "/api/auth/register",
+            "/api/v1/auth/register",
             json={"username": "ab", "password": "123"},
         )
 
@@ -57,18 +55,16 @@ def test_validation_exception_handler_returns_standard_error(
 
 
 def test_custom_exception_handler_returns_conflict(
-    tmp_path: Path,
+    settings: Settings,
 ) -> None:
-    settings = make_settings(tmp_path)
-    prepare_database(settings)
 
     with TestClient(create_app(settings)) as client:
         payload = {
             "username": "duplicate_user",
             "password": "StrongPassword123!",
         }
-        first = client.post("/api/auth/register", json=payload)
-        second = client.post("/api/auth/register", json=payload)
+        first = client.post("/api/v1/auth/register", json=payload)
+        second = client.post("/api/v1/auth/register", json=payload)
 
     assert first.status_code == 201
     assert second.status_code == 409
@@ -81,9 +77,8 @@ def test_custom_exception_handler_returns_conflict(
 
 
 def test_unhandled_exception_handler_returns_safe_response(
-    tmp_path: Path,
+    settings: Settings,
 ) -> None:
-    settings = make_settings(tmp_path)
     app = create_app(settings)
 
     async def trigger_error() -> None:

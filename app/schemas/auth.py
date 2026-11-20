@@ -2,6 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.enums import UserRole
+
 
 class RegisterRequest(BaseModel):
     email: str | None = Field(default=None, max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -39,7 +41,7 @@ class UserResponse(BaseModel):
 
     id: int
     username: str
-    role: str
+    role: UserRole
     email: str | None = None
     full_name: str = ""
     is_active: bool = True

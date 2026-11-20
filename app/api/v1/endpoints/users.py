@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Query
 
 from app.core.database import Session
 from app.core.permissions import require_role
+from app.enums import UserRole
 from app.repositories.user import UserRepository
 from app.schemas.auth import UserResponse
 from app.schemas.pagination import UserPage
@@ -23,7 +24,7 @@ UserServiceDependency = Annotated[
 
 AdminUser = Annotated[
     object,
-    Depends(require_role("admin")),
+    Depends(require_role(UserRole.ADMIN)),
 ]
 
 

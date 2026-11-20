@@ -3,9 +3,10 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, String, Text, func
+from sqlalchemy import Boolean, CheckConstraint, DateTime, Enum, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.enums import Priority, TaskStatus
 from app.models.base import Base
 
 if TYPE_CHECKING:
@@ -23,8 +24,16 @@ class Task(Base):
     )
     project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"), index=True)
     assignee_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), index=True)
-    status: Mapped[str] = mapped_column(String(20), default="TODO", server_default="TODO")
-    priority: Mapped[str] = mapped_column(String(10), default="MEDIUM", server_default="MEDIUM")
+    status: Mapped[TaskStatus] = mapped_column(
+        Enum(TaskStatus, native_enum=False, length=20),
+        default=TaskStatus.TODO,
+        server_default=TaskStatus.TODO,
+    )
+    priority: Mapped[Priority] = mapped_column(
+        Enum(Priority, native_enum=False, length=10),
+        default=Priority.MEDIUM,
+        server_default=Priority.MEDIUM,
+    )
     due_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

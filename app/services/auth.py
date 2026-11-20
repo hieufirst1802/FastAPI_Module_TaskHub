@@ -4,18 +4,25 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import jwt
-from fastapi import HTTPException
 from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
-from app.core.exceptions import UsernameAlreadyExistsError
+from app.core.exceptions import (
+    BadRequestException,
+    EmailAlreadyExistsError,
+    UnauthorizedException,
+    UsernameAlreadyExistsError,
+)
+from app.core.integrity import USERS_EMAIL_CONSTRAINT, USERS_USERNAME_INDEX, is_unique_violation
+from app.core.messages import INCORRECT_CURRENT_PASSWORD, INVALID_REFRESH_TOKEN
 from app.core.security import (
     create_access_token,
     hash_password,
     verify_password,
 )
+from app.enums import UserRole
 from app.models.refresh_token import RefreshToken
 from app.models.user import User
 from app.repositories.user import UserRepository
@@ -46,13 +53,15 @@ class AuthService:
                 email=email,
                 full_name=full_name,
                 password_hash=hash_password(password),
-                role="member",
+                role=UserRole.MEMBER,
             )
         except IntegrityError as exc:
             await self.session.rollback()
-            if email is not None and "email" in str(exc.orig).lower():
-                raise HTTPException(409, "Email already registered") from None
-            raise UsernameAlreadyExistsError() from exc
+            if is_unique_violation(exc, USERS_EMAIL_CONSTRAINT, "users.email"):
+                raise EmailAlreadyExistsError() from exc
+            if is_unique_violation(exc, USERS_USERNAME_INDEX, "users.username"):
+                raise UsernameAlreadyExistsError() from exc
+            raise
 
         return user
 
@@ -93,7 +102,7 @@ class AuthService:
         return TokenResponse(access_token=self.create_token(user), refresh_token=refresh)
 
     async def refresh(self, token: str) -> TokenResponse:
-        unauthorized = HTTPException(401, "Invalid or expired refresh token")
+        unauthorized = UnauthorizedException(INVALID_REFRESH_TOKEN)
         try:
             payload = jwt.decode(
                 token,
@@ -136,7 +145,7 @@ class AuthService:
 
     async def change_password(self, user: User, current: str, new: str) -> None:
         if not verify_password(current, user.password_hash):
-            raise HTTPException(400, "Incorrect current password")
+            raise BadRequestException(INCORRECT_CURRENT_PASSWORD)
         user.password_hash = hash_password(new)
         await self.session.execute(
             update(RefreshToken).where(RefreshToken.user_id == user.id).values(revoked=True)

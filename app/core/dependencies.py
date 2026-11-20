@@ -1,13 +1,15 @@
 from typing import Annotated
 
 import jwt
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, Request
 from fastapi.security import (
     HTTPAuthorizationCredentials,
     HTTPBearer,
 )
 
 from app.core.database import Session
+from app.core.exceptions import UnauthorizedException
+from app.core.messages import INVALID_AUTH_CREDENTIALS
 from app.core.security import decode_access_token
 from app.models.user import User
 from app.repositories.user import UserRepository
@@ -25,11 +27,7 @@ async def get_current_user(
     credentials: CurrentCredentials,
     session: Session,
 ) -> User:
-    unauthorized = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid or missing authentication credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
+    unauthorized = UnauthorizedException(INVALID_AUTH_CREDENTIALS)
 
     if credentials is None:
         raise unauthorized
@@ -42,7 +40,7 @@ async def get_current_user(
             raise unauthorized
 
         user_id = int(subject)
-    except (jwt.InvalidTokenError, ValueError):
+    except (jwt.InvalidTokenError, ValueError, TypeError, OverflowError):
         raise unauthorized from None
 
     user = await UserRepository(session).get(user_id)
