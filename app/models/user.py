@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import String
+from sqlalchemy import Enum, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
+from app.models.enums import UserRole
 
 if TYPE_CHECKING:
     from app.models.task import Task
@@ -21,9 +22,20 @@ class User(Base):
         index=True,
     )
     password_hash: Mapped[str] = mapped_column(String(255))
-    role: Mapped[str] = mapped_column(String(10), default="member")
+    role: Mapped[UserRole] = mapped_column(
+        Enum(
+            UserRole,
+            name="user_role",
+            native_enum=False,
+            create_constraint=True,
+            values_callable=lambda roles: [role.value for role in roles],
+        ),
+        default=UserRole.MEMBER,
+    )
 
     tasks: Mapped[list[Task]] = relationship(
         back_populates="owner",
+        cascade="all, delete",
+        passive_deletes=True,
         lazy="raise",
     )

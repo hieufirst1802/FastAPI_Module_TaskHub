@@ -1,58 +1,49 @@
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.constants import DEMO_USERNAME
+from app.core.exceptions import NotFoundException
+from app.core.messages import DEMO_OWNER_NOT_FOUND, TASK_NOT_FOUND
 from app.models.task import Task
 from app.repositories.task import TaskRepository
 from app.repositories.user import UserRepository
+from app.schemas.pagination import PaginationParams
 from app.schemas.task import TaskCreate, TaskUpdate
 
 
 class TaskService:
     def __init__(
         self,
+        session: AsyncSession,
         task_repository: TaskRepository,
         user_repository: UserRepository,
     ) -> None:
+        self.session = session
         self.task_repository = task_repository
         self.user_repository = user_repository
 
     async def create(self, data: TaskCreate) -> Task:
-        owner = await self.user_repository.by_username("demo")
+        async with self.session.begin():
+            owner = await self.user_repository.by_username(DEMO_USERNAME)
+            if owner is None:
+                raise NotFoundException(DEMO_OWNER_NOT_FOUND)
 
-        if owner is None:
-            owner = await self.user_repository.create(
-                username="demo",
-                password_hash="disabled-login",
-            )
+            return await self.task_repository.create(**data.model_dump(), owner_id=owner.id)
 
-        return await self.task_repository.create(
-            **data.model_dump(),
-            owner_id=owner.id,
-        )
+    async def page(self, pagination: PaginationParams) -> tuple[list[Task], int]:
+        return await self.task_repository.page(pagination)
 
-    async def page(self, offset: int, limit: int) -> tuple[list[Task], int]:
-        return await self.task_repository.page(offset, limit)
-
-    async def get(self, identifier: int) -> Task | None:
-        return await self.task_repository.get(identifier)
-
-    async def update(
-        self,
-        identifier: int,
-        data: TaskUpdate,
-    ) -> Task | None:
-        task = await self.task_repository.get(identifier)
-
+    async def get(self, task_id: int) -> Task:
+        task = await self.task_repository.get(task_id)
         if task is None:
-            return None
+            raise NotFoundException(TASK_NOT_FOUND)
+        return task
 
-        return await self.task_repository.update(
-            task,
-            data.model_dump(exclude_unset=True),
-        )
+    async def update(self, task_id: int, data: TaskUpdate) -> Task:
+        async with self.session.begin():
+            task = await self.get(task_id)
+            return await self.task_repository.update(task, data.model_dump(exclude_unset=True))
 
-    async def delete(self, identifier: int) -> bool:
-        task = await self.task_repository.get(identifier)
-
-        if task is None:
-            return False
-
-        await self.task_repository.delete(task)
-        return True
+    async def delete(self, task_id: int) -> None:
+        async with self.session.begin():
+            task = await self.get(task_id)
+            await self.task_repository.delete(task)

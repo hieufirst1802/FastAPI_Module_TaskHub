@@ -1,95 +1,72 @@
-from typing import Annotated
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, Path, Response, status
 
 from app.core.database import Session
-from app.models.task import Task
+from app.core.messages import DEMO_OWNER_NOT_FOUND, TASK_NOT_FOUND
 from app.repositories.task import TaskRepository
 from app.repositories.user import UserRepository
-from app.schemas.pagination import TaskPage
+from app.schemas.pagination import Page, Pagination
 from app.schemas.task import TaskCreate, TaskOut, TaskUpdate
 from app.services.task import TaskService
 
-router = APIRouter(prefix="/api/tasks", tags=["Tasks"])
+router = APIRouter(prefix="/tasks", tags=["Tasks"])
+
+TaskId = Annotated[int, Path(gt=0)]
+NOT_FOUND_RESPONSE: dict[int | str, dict[str, Any]] = {
+    status.HTTP_404_NOT_FOUND: {"description": TASK_NOT_FOUND},
+}
 
 
 def get_task_service(session: Session) -> TaskService:
-    task_repository = TaskRepository(session)
-    user_repository = UserRepository(session)
-
-    return TaskService(task_repository, user_repository)
+    return TaskService(session, TaskRepository(session), UserRepository(session))
 
 
-def to_task_out(task: Task) -> TaskOut:
-    return TaskOut.model_validate(task)
+TaskServiceDependency = Annotated[TaskService, Depends(get_task_service)]
 
 
-TaskServiceDependency = Annotated[
-    TaskService,
-    Depends(get_task_service),
-]
+@router.post(
+    "",
+    response_model=TaskOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a task",
+    responses={404: {"description": DEMO_OWNER_NOT_FOUND}},
+)
+async def create_task(data: TaskCreate, service: TaskServiceDependency) -> TaskOut:
+    return TaskOut.model_validate(await service.create(data))
 
 
-@router.post("", response_model=TaskOut, status_code=201)
-async def create(
-    data: TaskCreate,
-    service: TaskServiceDependency,
-) -> TaskOut:
-    task = await service.create(data)
-    return to_task_out(task)
-
-
-@router.get("", response_model=TaskPage)
-async def page(
-    service: TaskServiceDependency,
-    offset: int = Query(0, ge=0),
-    limit: int = Query(20, ge=1, le=100),
-) -> TaskPage:
-    rows, total = await service.page(offset, limit)
-
-    return TaskPage(
-        items=[to_task_out(task) for task in rows],
+@router.get("", response_model=Page[TaskOut], summary="List tasks")
+async def list_tasks(service: TaskServiceDependency, pagination: Pagination) -> Page[TaskOut]:
+    rows, total = await service.page(pagination)
+    return Page[TaskOut](
+        items=[TaskOut.model_validate(task) for task in rows],
         total=total,
-        offset=offset,
-        limit=limit,
+        offset=pagination.offset,
+        limit=pagination.limit,
     )
 
 
-@router.get("/{identifier}", response_model=TaskOut)
-async def read(
-    identifier: int,
-    service: TaskServiceDependency,
-) -> TaskOut:
-    task = await service.get(identifier)
-
-    if task is None:
-        raise HTTPException(status_code=404, detail="Task not found")
-
-    return to_task_out(task)
+@router.get(
+    "/{task_id}", response_model=TaskOut, summary="Get a task", responses=NOT_FOUND_RESPONSE
+)
+async def get_task(task_id: TaskId, service: TaskServiceDependency) -> TaskOut:
+    return TaskOut.model_validate(await service.get(task_id))
 
 
-@router.patch("/{identifier}", response_model=TaskOut)
-async def update(
-    identifier: int,
-    data: TaskUpdate,
-    service: TaskServiceDependency,
-) -> TaskOut:
-    task = await service.update(identifier, data)
-
-    if task is None:
-        raise HTTPException(status_code=404, detail="Task not found")
-
-    return to_task_out(task)
+@router.patch(
+    "/{task_id}", response_model=TaskOut, summary="Update a task", responses=NOT_FOUND_RESPONSE
+)
+async def update_task(task_id: TaskId, data: TaskUpdate, service: TaskServiceDependency) -> TaskOut:
+    return TaskOut.model_validate(await service.update(task_id, data))
 
 
-@router.delete("/{identifier}", status_code=204)
-async def delete(
-    identifier: int,
-    service: TaskServiceDependency,
-) -> Response:
-    deleted = await service.delete(identifier)
-
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Task not found")
-
-    return Response(status_code=204)
+@router.delete(
+    "/{task_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a task",
+    responses=NOT_FOUND_RESPONSE,
+)
+async def delete_task(task_id: TaskId, service: TaskServiceDependency) -> Response:
+    await service.delete(task_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

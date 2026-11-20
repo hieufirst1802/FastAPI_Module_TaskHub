@@ -29,9 +29,13 @@ app/
 │       └── router.py
 ├── core/
 │   ├── config.py
-│   └── database.py
+│   ├── constants.py
+│   ├── database.py
+│   ├── exceptions.py
+│   └── messages.py
 ├── models/
 │   ├── base.py
+│   ├── enums.py
 │   ├── task.py
 │   └── user.py
 ├── repositories/
@@ -39,6 +43,7 @@ app/
 │   ├── task.py
 │   └── user.py
 ├── schemas/
+│   ├── base.py
 │   ├── pagination.py
 │   └── task.py
 ├── services/
@@ -50,7 +55,11 @@ migrations/
 └── env.py
 
 tests/
-└── test_app.py
+├── conftest.py
+├── test_health.py
+├── test_pagination.py
+├── test_persistence.py
+└── test_tasks.py
 ```
 
 ## 3. Công nghệ sử dụng
@@ -128,11 +137,11 @@ Truy cập:
 
 | Method | Endpoint | Chức năng |
 |---|---|---|
-| POST | `/api/tasks` | Tạo Task |
-| GET | `/api/tasks` | Lấy danh sách Task có phân trang |
-| GET | `/api/tasks/{identifier}` | Lấy chi tiết Task |
-| PATCH | `/api/tasks/{identifier}` | Cập nhật Task |
-| DELETE | `/api/tasks/{identifier}` | Xóa Task |
+| POST | `/api/v1/tasks` | Tạo Task |
+| GET | `/api/v1/tasks` | Lấy danh sách Task có phân trang |
+| GET | `/api/v1/tasks/{task_id}` | Lấy chi tiết Task |
+| PATCH | `/api/v1/tasks/{task_id}` | Cập nhật Task |
+| DELETE | `/api/v1/tasks/{task_id}` | Xóa Task |
 | GET | `/health` | Kiểm tra ứng dụng và database |
 
 API danh sách hỗ trợ:
@@ -140,6 +149,13 @@ API danh sách hỗ trợ:
 - `offset`: vị trí bắt đầu, mặc định 0.
 - `limit`: số bản ghi, mặc định 20, tối đa 100.
 - `total`: tổng số bản ghi.
+
+Task dùng trường `status` với các giá trị `TODO` (mặc định), `IN_PROGRESS` và `DONE`.
+Migration chuyển `completed=false` thành `TODO` và `completed=true` thành `DONE`.
+Nếu downgrade, `IN_PROGRESS` được chuyển thành `completed=false`.
+
+Migration tạo user `demo` nếu chưa có. Bài 2 dùng tài khoản này làm chủ sở hữu khi tạo Task.
+Khi xóa một user, database tự động xóa các Task của user đó bằng `ON DELETE CASCADE`.
 
 ## 8. Kiểm thử và chất lượng mã nguồn
 
@@ -167,13 +183,3 @@ Kiểm tra đồng bộ database:
 ```powershell
 uv run alembic check
 ```
-
-## 9. Kết quả kiểm tra hiện tại
-
-- Ruff check: Passed.
-- Ruff format: Passed.
-- MyPy strict: Passed.
-- Pytest: 2 passed.
-- Alembic check: No new upgrade operations detected.
-
-Bài 2 kế thừa nền tảng CRUD và kiến trúc phân tầng của Bài 1, đồng thời bổ sung database persistence và quản lý schema bằng migration.
