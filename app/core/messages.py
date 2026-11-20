@@ -1,0 +1,6 @@
+TASK_NOT_FOUND = "Task not found"
+INVALID_AUTH_CREDENTIALS = "Invalid or missing authentication credentials"
+INVALID_TOKEN = "Invalid access token"
+INCORRECT_LOGIN = "Incorrect username or password"
+USERNAME_ALREADY_REGISTERED = "Username already registered"
+NULL_UPDATE_FIELDS = "Fields cannot be null. Omit unchanged fields."
