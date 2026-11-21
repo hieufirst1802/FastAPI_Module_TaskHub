@@ -9,7 +9,7 @@ from app.api.v1.endpoints.health import router as health_router
 from app.api.v1.router import router
 from app.core.config import Settings, get_settings
 from app.core.database import create_engine
-from app.core.exceptions import NotFoundException, handle_not_found
+from app.core.exceptions import AppException, handle_app_exception
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -35,11 +35,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             await engine.dispose()
 
     app = FastAPI(
-        title="TaskHub - Bai 2 Database",
+        title="TaskHub - Bai 3 Authentication",
         lifespan=lifespan,
     )
 
-    app.add_exception_handler(NotFoundException, handle_not_found)
+    app.add_exception_handler(AppException, handle_app_exception)
     app.include_router(health_router)
     app.include_router(router)
 

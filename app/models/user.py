@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Enum, String
+from sqlalchemy import Enum, String, true
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.constants import USERNAME_MAX_LENGTH
 from app.models.base import Base
 from app.models.enums import UserRole
 
@@ -17,11 +18,12 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     username: Mapped[str] = mapped_column(
-        String(50),
+        String(USERNAME_MAX_LENGTH),
         unique=True,
         index=True,
     )
     password_hash: Mapped[str] = mapped_column(String(255))
+    is_active: Mapped[bool] = mapped_column(default=True, server_default=true())
     role: Mapped[UserRole] = mapped_column(
         Enum(
             UserRole,

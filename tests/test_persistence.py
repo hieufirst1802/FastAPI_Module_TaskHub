@@ -9,14 +9,15 @@ from app.core.database import create_engine
 from app.main import create_app
 
 
-def test_database_persistence(settings, tasks_url):
-    with TestClient(create_app(settings)) as client:
-        response = client.post(tasks_url, json={"title": "Persistent task"})
-        assert response.status_code == 201
-        task = response.json()
+def test_database_persistence(settings, tasks_url, client, access_token):
+    response = client.post(tasks_url, json={"title": "Persistent task"})
+    assert response.status_code == 201
+    task = response.json()
 
-    with TestClient(create_app(settings)) as client:
-        response = client.get(f"{tasks_url}/{task['id']}")
+    with TestClient(create_app(settings)) as restarted_client:
+        response = restarted_client.get(
+            f"{tasks_url}/{task['id']}", headers={"Authorization": f"Bearer {access_token}"}
+        )
         assert response.status_code == 200
         assert response.json() == task
 
@@ -27,7 +28,7 @@ def test_upgrade_preserves_existing_tasks_and_owner(tmp_path, migration_config):
     command.upgrade(config, "fdaf932d4a5a")
 
     with closing(sqlite3.connect(database)) as connection, connection:
-        connection.execute("INSERT INTO users VALUES (1, 'demo', 'existing-hash', 'member')")
+        connection.execute("INSERT INTO users VALUES (1, 'demo', 'disabled-login', 'member')")
         connection.executemany(
             "INSERT INTO tasks VALUES (?, ?, '', ?, 1)",
             [(1, "Planned", False), (2, "Finished", True)],
@@ -36,9 +37,9 @@ def test_upgrade_preserves_existing_tasks_and_owner(tmp_path, migration_config):
     command.upgrade(config, "head")
     command.check(config)
     with closing(sqlite3.connect(database)) as connection:
-        assert connection.execute("SELECT * FROM users").fetchall() == [
-            (1, "demo", "existing-hash", "member")
-        ]
+        assert connection.execute(
+            "SELECT id, username, password_hash, role, is_active FROM users"
+        ).fetchall() == [(1, "demo", "disabled-login", "member", 0)]
         assert connection.execute(
             "SELECT id, status, owner_id FROM tasks ORDER BY id"
         ).fetchall() == [(1, "TODO", 1), (2, "DONE", 1)]

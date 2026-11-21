@@ -1,10 +1,10 @@
-# Bài 2 — Database & Layered Architecture
+# Bài 3 — JWT Authentication
 
-Nhánh thực hiện: `lesson-2-rework`
+Nhánh thực hiện: `lesson-3-authentication`
 
 ## 1. Mục tiêu
 
-Mở rộng Bài 1 từ ứng dụng FastAPI sử dụng dữ liệu trong bộ nhớ thành ứng dụng có cơ sở dữ liệu lưu trữ lâu dài, sử dụng SQLAlchemy Async và Alembic.
+Mở rộng Bài 2 với đăng ký, đăng nhập bằng JWT và kiểm tra chủ sở hữu khi truy cập Task.
 
 Các mục tiêu chính:
 
@@ -24,6 +24,7 @@ app/
 ├── api/
 │   └── v1/
 │       ├── endpoints/
+│       │   ├── auth.py
 │       │   ├── health.py
 │       │   └── tasks.py
 │       └── router.py
@@ -31,8 +32,10 @@ app/
 │   ├── config.py
 │   ├── constants.py
 │   ├── database.py
+│   ├── dependencies.py
 │   ├── exceptions.py
-│   └── messages.py
+│   ├── messages.py
+│   └── security.py
 ├── models/
 │   ├── base.py
 │   ├── enums.py
@@ -43,10 +46,12 @@ app/
 │   ├── task.py
 │   └── user.py
 ├── schemas/
+│   ├── auth.py
 │   ├── base.py
 │   ├── pagination.py
 │   └── task.py
 ├── services/
+│   ├── auth.py
 │   └── task.py
 └── main.py
 
@@ -56,6 +61,7 @@ migrations/
 
 tests/
 ├── conftest.py
+├── test_auth.py
 ├── test_health.py
 ├── test_pagination.py
 ├── test_persistence.py
@@ -95,7 +101,7 @@ Mặc định sử dụng SQLite:
 
 `sqlite+aiosqlite:///./tasks.db`
 
-Khởi tạo database bằng migration:
+Sau khi thiết lập `JWT_SECRET_KEY` ở mục 6, cập nhật database bằng migration:
 
 ```powershell
 uv run alembic upgrade head
@@ -114,6 +120,14 @@ Cài đặt dependencies:
 
 ```powershell
 uv sync
+```
+
+Nếu chưa có `.env`, sao chép từ `.env.example`. Tạo khóa riêng bằng lệnh sau và đặt kết quả
+vào `JWT_SECRET_KEY` trong `.env`. Khóa có tối thiểu 32 ký tự. Thuật toán là `HS256` và
+`ACCESS_TOKEN_EXPIRE_MINUTES` mặc định là 30 phút.
+
+```powershell
+uv run python -c "import secrets; print(secrets.token_hex(32))"
 ```
 
 Khởi tạo database:
@@ -137,6 +151,9 @@ Truy cập:
 
 | Method | Endpoint | Chức năng |
 |---|---|---|
+| POST | `/api/v1/auth/register` | Đăng ký |
+| POST | `/api/v1/auth/login` | Đăng nhập và nhận access token |
+| GET | `/api/v1/auth/me` | Xem tài khoản hiện tại |
 | POST | `/api/v1/tasks` | Tạo Task |
 | GET | `/api/v1/tasks` | Lấy danh sách Task có phân trang |
 | GET | `/api/v1/tasks/{task_id}` | Lấy chi tiết Task |
@@ -144,18 +161,15 @@ Truy cập:
 | DELETE | `/api/v1/tasks/{task_id}` | Xóa Task |
 | GET | `/health` | Kiểm tra ứng dụng và database |
 
+Gửi `Authorization: Bearer <access_token>` cho `/auth/me` và các API Task. Mỗi tài khoản
+chỉ truy cập Task của mình. Khi tạo Task, hệ thống lấy chủ sở hữu từ tài khoản đang đăng nhập.
+Migration vô hiệu hóa tài khoản demo cũ có mật khẩu `disabled-login` và giữ lại dữ liệu liên quan.
+
 API danh sách hỗ trợ:
 
 - `offset`: vị trí bắt đầu, mặc định 0.
 - `limit`: số bản ghi, mặc định 20, tối đa 100.
 - `total`: tổng số bản ghi.
-
-Task dùng trường `status` với các giá trị `TODO` (mặc định), `IN_PROGRESS` và `DONE`.
-Migration chuyển `completed=false` thành `TODO` và `completed=true` thành `DONE`.
-Nếu downgrade, `IN_PROGRESS` được chuyển thành `completed=false`.
-
-Migration tạo user `demo` nếu chưa có. Bài 2 dùng tài khoản này làm chủ sở hữu khi tạo Task.
-Khi xóa một user, database tự động xóa các Task của user đó bằng `ON DELETE CASCADE`.
 
 ## 8. Kiểm thử và chất lượng mã nguồn
 

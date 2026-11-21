@@ -1,4 +1,5 @@
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Annotated
 
 from fastapi import Depends, Request
@@ -22,6 +23,16 @@ def create_engine(database_url: str) -> AsyncEngine:
                 cursor.close()
 
     return engine
+
+
+@asynccontextmanager
+async def transaction(session: AsyncSession) -> AsyncIterator[None]:
+    try:
+        yield
+        await session.commit()
+    except BaseException:
+        await session.rollback()
+        raise
 
 
 async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
