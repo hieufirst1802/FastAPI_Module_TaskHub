@@ -131,3 +131,5 @@ git diff --check
 Tests dùng SQLite và Redis giả có đồng hồ TTL điều khiển được. Có kiểm thử cache hit/miss/expiration/giảm truy vấn/invalidation/lỗi Redis; JWT rotation/concurrency; profile; RBAC và thu hồi quyền; task/label/comment; cascade; API cũ; migration nâng/hạ/nâng giữ dữ liệu cũ và kiểm tra schema drift.
 
 Chi tiết thiết kế cache xem [README_DAY6.md](README_DAY6.md).
+
+Xem [Bài 8](README_DAY8.md) để biết phạm vi rà soát, thay đổi hiệu năng và quy trình kiểm tra tự động.
