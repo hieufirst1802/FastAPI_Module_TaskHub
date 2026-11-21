@@ -1,6 +1,8 @@
 """Best-effort async cache. SQL remains the source of truth."""
 
 import logging
+from hashlib import sha256
+from json import dumps
 from uuid import uuid4
 
 from pydantic import BaseModel, ValidationError
@@ -10,7 +12,6 @@ from redis.backoff import NoBackoff
 from redis.exceptions import RedisError
 
 from app.core.config import Settings
-from app.enums import Priority, TaskStatus
 
 logger = logging.getLogger(__name__)
 VERSION_TTL_MULTIPLIER = 2
@@ -44,17 +45,17 @@ class TaskCache:
     def project_version_key(self, project_id: int) -> str:
         return f"{self.prefix}:projects:{project_id}:version"
 
-    def project_page_key(
+    def standalone_version_key(self) -> str:
+        return f"{self.prefix}:tasks:standalone:version"
+
+    def page_key(
         self,
-        project_id: int,
+        scope: str,
         version: str,
-        page: int,
-        limit: int,
-        status: TaskStatus | None,
-        priority: Priority | None,
-        assignee_id: int | None,
+        *parameters: str | int | bool | None,
     ) -> str:
-        return f"{self.prefix}:projects:{project_id}:tasks:{version}:{page}:{limit}:{status}:{priority}:{assignee_id}"
+        digest = sha256(dumps(parameters).encode()).hexdigest()
+        return f"{self.prefix}:{scope}:page:{version}:{digest}"
 
     async def version(self, key: str) -> str | None:
         if self.client is None:

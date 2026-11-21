@@ -4,8 +4,9 @@ from app.core.messages import TASK_NOT_FOUND
 from app.enums import TaskStatus, UserRole
 from app.models.task import Task
 from app.models.user import User
-from app.repositories.task import TaskRepository
-from app.schemas.task import TaskCreate, TaskOut, TaskUpdate
+from app.repositories.task import TaskRepository, task_filters
+from app.schemas.pagination import TaskPage
+from app.schemas.task import StandaloneTaskQuery, TaskCreate, TaskOut, TaskUpdate
 from app.services.workspace import WorkspaceService
 
 
@@ -21,27 +22,53 @@ class TaskService:
         self.cache = cache
 
     async def create(self, data: TaskCreate, current_user: User) -> Task:
-        return await self.task_repository.create(
+        task = await self.task_repository.create(
             **data.model_dump(),
             status=TaskStatus.DONE if data.completed else TaskStatus.TODO,
             owner_id=current_user.id,
         )
+        if self.cache is not None:
+            await self.cache.bump_version(self.cache.standalone_version_key())
+        return task
 
-    async def page(
-        self,
-        offset: int,
-        limit: int,
-        current_user: User,
-    ) -> tuple[list[Task], int]:
-        if current_user.role == UserRole.ADMIN:
-            return await self.task_repository.page(offset, limit, Task.project_id.is_(None))
+    async def page(self, query: StandaloneTaskQuery, current_user: User) -> TaskPage:
+        owner_id = None if current_user.role == UserRole.ADMIN else current_user.id
+        cache = self.cache
+        key = None
+        if cache is not None:
+            version = await cache.version(cache.standalone_version_key())
+            if version is not None:
+                key = cache.page_key(
+                    "tasks:standalone",
+                    version,
+                    owner_id,
+                    query.offset,
+                    query.limit,
+                    query.search or None,
+                    query.status,
+                    query.priority,
+                    query.completed,
+                )
+                cached = await cache.get(key, TaskPage)
+                if cached is not None:
+                    return cached
 
-        return await self.task_repository.page(
-            offset,
-            limit,
-            Task.owner_id == current_user.id,
-            Task.project_id.is_(None),
+        filters = task_filters(query)
+        filters.append(Task.project_id.is_(None))
+        if owner_id is not None:
+            filters.append(Task.owner_id == owner_id)
+        if query.completed is not None:
+            filters.append(Task.completed == query.completed)
+        rows, total = await self.task_repository.page(query.offset, query.limit, *filters)
+        result = TaskPage(
+            items=[TaskOut.model_validate(task) for task in rows],
+            total=total,
+            offset=query.offset,
+            limit=query.limit,
         )
+        if cache is not None and key is not None:
+            await cache.set(key, result)
+        return result
 
     async def _get_from_database(
         self,
@@ -98,8 +125,10 @@ class TaskService:
 
         if self.cache is not None:
             await self.cache.invalidate(identifier)
-        if task.project_id is not None and self.cache is not None:
-            await self.cache.invalidate_project(task.project_id)
+            if task.project_id is None:
+                await self.cache.bump_version(self.cache.standalone_version_key())
+            else:
+                await self.cache.invalidate_project(task.project_id)
         return updated
 
     async def delete(
@@ -115,3 +144,4 @@ class TaskService:
         await self.task_repository.delete(task)
         if self.cache is not None:
             await self.cache.invalidate(identifier)
+            await self.cache.bump_version(self.cache.standalone_version_key())

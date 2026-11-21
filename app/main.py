@@ -8,6 +8,7 @@ from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.api.v1.router import router
+from app.core.api_docs import error_responses
 from app.core.cache import TaskCache
 from app.core.config import Settings, get_settings
 from app.core.exception_handlers import register_exception_handlers
@@ -55,7 +56,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             await engine.dispose()
 
     app = FastAPI(
-        title="TaskHub - FastAPI Practice",
+        title="TaskHub API",
+        version="1.0.0",
+        description=(
+            "Manage workspaces, projects, and tasks. Sign in to obtain an access token, "
+            "then use Authorize to call protected endpoints. Error responses include "
+            "a machine-readable code and a message."
+        ),
+        responses=error_responses(500),
         lifespan=lifespan,
     )
 
