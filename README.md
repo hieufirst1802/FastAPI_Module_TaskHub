@@ -15,7 +15,7 @@ docker compose up -d redis
 uv run uvicorn app.main:create_app --factory --reload
 ```
 
-Redis mặc định tắt khi chạy local. Đặt `REDIS_ENABLED=true` trong `.env` nếu chạy lệnh Docker để bật cache. Swagger: http://localhost:8000/docs; ReDoc: http://localhost:8000/redoc; health: http://localhost:8000/health. Cài bằng pip nếu cần: `python -m pip install -r requirements.txt`; dev tools: `python -m pip install pytest pytest-asyncio httpx ruff mypy`.
+Redis mặc định tắt khi chạy app trực tiếp bằng Uvicorn. Đặt `REDIS_ENABLED=true` và `REDIS_URL=redis://localhost:6379/0` trong `.env` để dùng dịch vụ Redis khởi động bằng Compose. Có thể cài thư viện bằng `python -m pip install -r requirements.txt`.
 
 ## Docker Compose
 
@@ -25,7 +25,7 @@ docker compose logs -f app
 docker compose down
 ```
 
-Stack gồm app, PostgreSQL 16 và Redis 7. App tự chạy migration trước khi khởi động. PostgreSQL lưu trong volume `postgres_data`; `docker compose down` giữ volume. Compose dùng database riêng, không tự nhập SQLite cũ. Đổi JWT secret và `POSTGRES_PASSWORD` trước khi triển khai; mặc định chỉ dành cho local. Docker Engine phải đang chạy.
+Stack gồm app, PostgreSQL 16 và Redis 7. Compose bật Redis cho app và kết nối nội bộ qua `redis://redis:6379/0`. App tự chạy migration trước khi mở cổng HTTP. PostgreSQL lưu trong volume `postgres_data`, được giữ khi chạy `docker compose down`. Compose dùng database riêng, không tự nhập SQLite cũ. Đổi `JWT_SECRET_KEY` và `POSTGRES_PASSWORD` trước khi triển khai. Docker Engine phải đang chạy.
 
 ## Các chức năng
 
@@ -34,9 +34,9 @@ Stack gồm app, PostgreSQL 16 và Redis 7. App tự chạy migration trước k
 - Profile GET/PATCH full_name/email; đổi mật khẩu thu hồi mọi refresh token của user; từ chối tài khoản inactive.
 - Workspace CRUD, thêm/xóa thành viên đã đăng ký, đổi EDITOR/VIEWER. Chủ Workspace nhận OWNER khi tạo, không được xóa/hạ vai trò qua API thành viên.
 - Project CRUD, archive/unarchive. ARCHIVED vẫn đọc được, chặn sửa task/label/comment và tạo task mới. Owner/Admin có thể xóa Project/Workspace cùng dữ liệu con.
-- Task theo Project: assignee, trạng thái, độ ưu tiên, due_date; lọc status/priority/assignee; page/limit/total.
+- Danh sách task tìm kiếm theo tiêu đề và mô tả, kết hợp lọc và phân trang. Task theo Project hỗ trợ assignee, trạng thái, độ ưu tiên và due_date.
 - Label CRUD theo Project, gắn/gỡ label cùng Project; thêm/xem/xóa comment.
-- Cache chi tiết task cũ và danh sách task theo Project, TTL, invalidation sau commit, fallback database. Luôn kiểm tra quyền Workspace trước cache hit.
+- Redis cache cho chi tiết task độc lập và cả hai API danh sách task. Luôn kiểm tra quyền Workspace trước khi đọc cache danh sách theo Project.
 
 ## Ma trận quyền
 
@@ -71,7 +71,7 @@ Assignee phải là user active thuộc Workspace. Xóa membership tự gỡ ass
 | PATCH/DELETE | `/api/v1/workspaces/{wid}/members/{uid}` | Đổi role/xóa thành viên |
 | POST/GET | `/api/v1/workspaces/{wid}/projects` | Project trong Workspace |
 | GET/PATCH/DELETE | `/api/v1/projects/{pid}` | Project CRUD; PATCH status=ARCHIVED/ACTIVE |
-| POST/GET | `/api/v1/projects/{pid}/tasks` | Tạo; lọc/phân trang/cache |
+| POST/GET | `/api/v1/projects/{pid}/tasks` | Tạo, tìm kiếm, lọc, phân trang và cache |
 | GET/PATCH/DELETE | `/api/v1/tasks/{tid}` | Task CRUD |
 | POST/GET | `/api/v1/projects/{pid}/labels` | Tạo/liệt kê |
 | PATCH/DELETE | `/api/v1/labels/{lid}` | Sửa/xóa |
@@ -80,11 +80,22 @@ Assignee phải là user active thuộc Workspace. Xóa membership tự gỡ ass
 | POST/GET | `/api/v1/tasks/{tid}/comments` | Thêm/liệt kê |
 | DELETE | `/api/v1/comments/{cid}` | Xóa comment |
 
-Task status: TODO/IN_PROGRESS/IN_REVIEW/DONE; priority: LOW/MEDIUM/HIGH/URGENT. Danh sách task hỗ trợ `?status=TODO&priority=HIGH&assignee_id=2&page=1&limit=20`. `page >= 1`, `1 <= limit <= 100`. PATCH cho phép `assignee_id=null` và `due_date=null` để xóa; các field khác không nhận null. Gửi due_date theo ISO 8601 UTC.
+Ví dụ tìm task theo Project với `GET /api/v1/projects/1/tasks?search=release&status=TODO&priority=HIGH&assignee_id=2&page=1&limit=20`. Ví dụ tìm task độc lập với `GET /api/tasks?search=release&completed=false&offset=0&limit=20`. Xem tham số, định dạng phản hồi và cách hoạt động của Redis trong [Bài 7](README_DAY7.md).
+
+PATCH cho phép `assignee_id=null` và `due_date=null` để xóa giá trị. Các field khác không nhận null. Gửi `due_date` theo ISO 8601 UTC.
 
 Danh sách Workspace, Project, Task trong Project và Comment trả `{items, total, page, limit}`.
 
-Swagger: đăng ký → đăng nhập → Authorize bằng access_token → tạo Workspace → mời user → tạo Project → tạo task. Refresh/logout nhận `{"refresh_token":"..."}`. Refresh thành công làm token cũ hết hiệu lực; client phải lưu cặp mới. Logout chỉ revoke refresh token được gửi; access token đã phát vẫn sống đến TTL (mặc định 30 phút). Refresh token không dùng được như Bearer access token.
+## Thử API trên Swagger UI
+
+Tài liệu chạy tại [Swagger UI](http://localhost:8000/docs), [ReDoc](http://localhost:8000/redoc) và [OpenAPI JSON](http://localhost:8000/openapi.json). Kiểm tra API đã sẵn sàng qua [health](http://localhost:8000/health).
+
+1. Trong Swagger, dùng **Try it out** rồi **Execute** cho `POST /api/v1/auth/register` và `POST /api/v1/auth/login`. Đăng nhập thành công trả `access_token` và `refresh_token`.
+2. Bấm **Authorize** và dán giá trị `access_token` vào ô **HTTPBearer**. Swagger tự thêm tiền tố `Bearer`. Gọi `GET /api/v1/auth/me` để kiểm tra tài khoản nhận được HTTP 200.
+3. Tạo Workspace, dùng ID trả về để tạo Project, rồi tạo task bằng ID Project. Thử `GET /api/v1/projects/{pid}/tasks` với `search`, `status`, `page=1` và `limit=10` để xem danh sách đã lọc.
+4. Gửi `limit=0` để kiểm tra lỗi 422. Phần **Responses** mô tả lỗi qua `error.code` và `error.message`. Lỗi kiểm tra tham số còn có `error.details`.
+
+Refresh và logout nhận `{"refresh_token":"..."}`. Refresh thành công tiêu thụ token đã gửi và trả cặp mới. Logout thu hồi refresh token được gửi. Access token đã cấp có thời hạn mặc định 30 phút.
 
 ## Kiến trúc và dữ liệu cũ
 
@@ -104,7 +115,7 @@ Xem `.env.example`: DATABASE_URL, JWT_SECRET_KEY, JWT_ALGORITHM, ACCESS_TOKEN_EX
 
 Đặt `ENVIRONMENT=staging` hoặc `ENVIRONMENT=production` khi triển khai. Ứng dụng sẽ từ chối khởi động nếu `JWT_SECRET_KEY` là giá trị mẫu hoặc ngắn hơn 32 ký tự. Thuật toán JWT là `HS256`.
 
-Client Redis theo lifespan. Khi Redis lỗi, API đọc database và ghi warning. Cache lưu chi tiết Task độc lập và danh sách Task theo Project. Chi tiết Task thuộc Project luôn đọc DB và kiểm tra quyền. Key danh sách gồm Project ID, phiên bản, bộ lọc và phân trang. Sau khi commit thay đổi, phiên bản liên quan đổi sang UUID mới. Một lượt đọc chậm chỉ có thể ghi vào phiên bản cũ. TTL phiên bản gấp đôi TTL dữ liệu. Nếu Redis lỗi khi cập nhật phiên bản, dữ liệu cũ có thể còn được đọc đến hết TTL. Authentication/membership không cache. Redis không lưu password/token.
+Client Redis theo lifespan. Khi Redis lỗi, API đọc database và ghi warning. Cache lưu chi tiết task độc lập và cả hai danh sách task. Chi tiết task thuộc Project luôn đọc database và kiểm tra quyền. Key danh sách gồm phạm vi truy cập, phiên bản, tìm kiếm, bộ lọc và phân trang. Sau khi commit thay đổi, phiên bản liên quan đổi sang UUID mới. Một lượt đọc chậm chỉ có thể ghi vào phiên bản cũ. TTL phiên bản gấp đôi TTL dữ liệu. Nếu Redis lỗi khi cập nhật phiên bản, dữ liệu cũ có thể còn được đọc đến hết TTL. Authentication và membership được kiểm tra qua database.
 
 ## Kiểm thử và giới hạn
 

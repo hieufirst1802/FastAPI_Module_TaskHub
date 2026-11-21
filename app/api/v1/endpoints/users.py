@@ -2,6 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 
+from app.core.api_docs import error_responses
 from app.core.database import Session
 from app.core.permissions import require_role
 from app.enums import UserRole
@@ -28,7 +29,13 @@ AdminUser = Annotated[
 ]
 
 
-@router.get("", response_model=UserPage)
+@router.get(
+    "",
+    response_model=UserPage,
+    summary="List accounts",
+    description="Return an offset-paginated account list. Administrator access is required.",
+    responses=error_responses(401, 403, 422),
+)
 async def page(
     service: UserServiceDependency,
     admin: AdminUser,

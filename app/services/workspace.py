@@ -30,13 +30,15 @@ from app.core.messages import (
     PROJECT_TASK_NOT_FOUND,
     WORKSPACE_NOT_FOUND,
 )
-from app.enums import Priority, ProjectStatus, TaskStatus, UserRole, WorkspaceRole
+from app.enums import ProjectStatus, TaskStatus, UserRole, WorkspaceRole
 from app.models.task import Task
 from app.models.user import User
 from app.models.workspace import Comment, Label, Project, TaskLabel, Workspace, WorkspaceMember
+from app.repositories.task import task_filters
 from app.repositories.workspace import DomainRepository, MembershipRepository
 from app.schemas.auth import ProfileUpdate
 from app.schemas.pagination import Page, PaginationParams
+from app.schemas.task import ProjectTaskFilters
 from app.schemas.workspace import (
     LabelInput,
     ProjectInput,
@@ -317,9 +319,7 @@ class WorkspaceService:
         pid: int,
         user: User,
         pagination: PaginationParams,
-        status: TaskStatus | None,
-        priority: Priority | None,
-        assignee_id: int | None,
+        query: ProjectTaskFilters,
     ) -> Page[ProjectTaskOut]:
         await self.project(pid, user)
         cache = self.cache
@@ -327,19 +327,23 @@ class WorkspaceService:
         if cache is not None:
             version = await cache.version(cache.project_version_key(pid))
             if version is not None:
-                key = cache.project_page_key(
-                    pid, version, pagination.page, pagination.limit, status, priority, assignee_id
+                key = cache.page_key(
+                    f"projects:{pid}:tasks",
+                    version,
+                    pagination.page,
+                    pagination.limit,
+                    query.search or None,
+                    query.status,
+                    query.priority,
+                    query.assignee_id,
                 )
                 cached = await cache.get(key, Page[ProjectTaskOut])
                 if cached is not None:
                     return cached
-        filters = [Task.project_id == pid]
-        if status is not None:
-            filters.append(Task.status == status)
-        if priority is not None:
-            filters.append(Task.priority == priority)
-        if assignee_id is not None:
-            filters.append(Task.assignee_id == assignee_id)
+        filters = task_filters(query)
+        filters.append(Task.project_id == pid)
+        if query.assignee_id is not None:
+            filters.append(Task.assignee_id == query.assignee_id)
         rows, total = await self.tasks.page(pagination.offset, pagination.limit, *filters)
         result = Page[ProjectTaskOut](
             items=[ProjectTaskOut.model_validate(t) for t in rows],

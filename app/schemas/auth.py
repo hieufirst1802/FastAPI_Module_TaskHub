@@ -20,6 +20,12 @@ class RegisterRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [{"username": "demo_member", "password": "ExamplePassword123!"}]
+        }
+    )
+
     username: str = Field(
         min_length=3,
         max_length=50,
@@ -31,8 +37,8 @@ class LoginRequest(BaseModel):
 
 
 class TokenResponse(BaseModel):
-    refresh_token: str
-    access_token: str
+    refresh_token: str = Field(description="Token used for refresh or logout.")
+    access_token: str = Field(description="JWT used in the Authorization Bearer header.")
     token_type: str = "bearer"
 
 
@@ -49,7 +55,9 @@ class UserResponse(BaseModel):
 
 
 class RefreshRequest(BaseModel):
-    refresh_token: str = Field(min_length=1, max_length=4096)
+    refresh_token: str = Field(
+        min_length=1, max_length=4096, description="Refresh token from login or rotation."
+    )
 
 
 class ProfileUpdate(BaseModel):
