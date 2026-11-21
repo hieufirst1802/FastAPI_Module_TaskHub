@@ -103,13 +103,17 @@ Refresh và logout nhận `{"refresh_token":"..."}`. Refresh thành công tiêu 
 
 Task cũ giữ `project_id=null`, quyền owner/admin tại `/api/tasks`. Không tự chuyển task cũ vào Workspace bất kỳ. Task mới tạo qua `/api/v1/projects/{pid}/tasks`. `created_by` được trả từ cột `owner_id` hiện có để tránh nhân đôi dữ liệu. `completed` đồng bộ với status DONE khi sửa qua API. Danh sách `/api/tasks` chỉ liệt kê task cũ; thao tác chi tiết task có Project qua URL cũ vẫn kiểm tra quyền Workspace.
 
+Khi nâng cấp client từ Bài 2–5, dùng `/api/tasks` cho task độc lập và `/api/users` cho danh sách tài khoản của admin. Hai danh sách này nhận `offset` và `limit`. Danh sách task theo Project dùng `page` và `limit`.
+
 Bốn module in-memory Day 1 đã được đối chiếu import và Git history (`064067d`), chuyển thành `.py.txt` tại [docs/legacy_day1](docs/legacy_day1/README.md). Runtime dùng các package cùng tên. Tài liệu Day 2 cũ lưu tại [docs/README_DAY2.md](docs/README_DAY2.md).
 
-Sao lưu trước migration. Upgrade thêm schema và backfill task completed thành DONE. Downgrade xóa dữ liệu domain mới và refresh token; chỉ dùng khi đã sao lưu hoặc trên database thử nghiệm. SQLite local bật foreign keys khi ứng dụng kết nối.
+Sao lưu trước khi chạy `uv run alembic upgrade head`. Đường nâng cấp nhận database Bài 2 (`6efbd1a2c410`), Bài 3–5 (`ab39fc81da27`) và database đã nâng lên Bài 6. Migration giữ user, task và trạng thái hiện tại, đồng thời khôi phục cờ `completed` từ trạng thái `DONE`. Downgrade qua revision TaskHub xóa dữ liệu Workspace, Project và refresh token, đồng thời chuyển `IN_REVIEW` về `IN_PROGRESS`. SQLite bật foreign keys khi ứng dụng kết nối.
 
 ## Cấu hình và cache
 
 Xem `.env.example`: DATABASE_URL, JWT_SECRET_KEY, JWT_ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES, REFRESH_TOKEN_EXPIRE_DAYS, REDIS_ENABLED, REDIS_URL, REDIS_CACHE_TTL, REDIS_SOCKET_TIMEOUT, REDIS_KEY_PREFIX. Dùng namespace Redis riêng cho từng database/môi trường.
+
+Đặt `ENVIRONMENT=staging` hoặc `ENVIRONMENT=production` khi triển khai. Ứng dụng sẽ từ chối khởi động nếu `JWT_SECRET_KEY` là giá trị mẫu hoặc ngắn hơn 32 ký tự. Thuật toán JWT là `HS256`.
 
 Client Redis theo lifespan. Khi Redis lỗi, API đọc database và ghi warning. Cache lưu chi tiết task độc lập và cả hai danh sách task. Chi tiết task thuộc Project luôn đọc database và kiểm tra quyền. Key danh sách gồm phạm vi truy cập, phiên bản, tìm kiếm, bộ lọc và phân trang. Sau khi commit thay đổi, phiên bản liên quan đổi sang UUID mới. Một lượt đọc chậm chỉ có thể ghi vào phiên bản cũ. TTL phiên bản gấp đôi TTL dữ liệu. Nếu Redis lỗi khi cập nhật phiên bản, dữ liệu cũ có thể còn được đọc đến hết TTL. Authentication và membership được kiểm tra qua database.
 

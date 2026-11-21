@@ -364,8 +364,10 @@ def test_user_rbac(settings: Settings) -> None:
         assert response.status_code == 200
 
         data = response.json()
-        assert data["total"] == 2
-        assert len(data["items"]) == 2
+        assert data["total"] == 3
+        assert len(data["items"]) == 3
+        demo_user = next(user for user in data["items"] if user["username"] == "demo")
+        assert demo_user["is_active"] is False
         assert data["offset"] == 0
         assert data["limit"] == 20
 
