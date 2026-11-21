@@ -23,6 +23,7 @@ def migration_config():
     def make_config(database_url):
         config = Config(str(ALEMBIC_INI))
         config.attributes["database_url"] = database_url
+        config.attributes["configure_logger"] = False
         return config
 
     return make_config
@@ -35,6 +36,7 @@ def settings(tmp_path, migration_config):
         jwt_secret_key=SecretStr(token_hex(32)),
         jwt_algorithm="HS256",
         access_token_expire_minutes=7,
+        log_level="INFO",
     )
     command.upgrade(migration_config(settings.database_url), "head")
     return settings

@@ -41,7 +41,7 @@ def test_delete_task(client, task, tasks_url):
 def test_missing_task(client, method, tasks_url):
     response = client.request(method, f"{tasks_url}/999", json={} if method == "PATCH" else None)
     assert response.status_code == 404
-    assert response.json() == {"detail": "Task not found"}
+    assert response.json() == {"error": {"code": "not_found", "message": "Task not found"}}
 
 
 @pytest.mark.parametrize("method", ["GET", "PATCH", "DELETE"])

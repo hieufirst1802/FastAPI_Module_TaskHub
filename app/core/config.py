@@ -13,6 +13,7 @@ class Settings(BaseSettings):
 
     environment: str = "development"
     database_url: str = "sqlite+aiosqlite:///./tasks.db"
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
 
     # JWT configuration
     jwt_secret_key: SecretStr = Field(min_length=32)
