@@ -7,6 +7,7 @@ import jwt
 from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.concurrency import run_in_threadpool
 
 from app.core.config import Settings, get_settings
 from app.core.exceptions import (
@@ -52,7 +53,7 @@ class AuthService:
                 username=username,
                 email=email,
                 full_name=full_name,
-                password_hash=hash_password(password),
+                password_hash=await run_in_threadpool(hash_password, password),
                 role=UserRole.MEMBER,
             )
         except IntegrityError as exc:
@@ -75,7 +76,7 @@ class AuthService:
         if user is None or not user.is_active:
             return None
 
-        if not verify_password(password, user.password_hash):
+        if not await run_in_threadpool(verify_password, password, user.password_hash):
             return None
 
         return user
@@ -144,9 +145,9 @@ class AuthService:
         await self.session.commit()
 
     async def change_password(self, user: User, current: str, new: str) -> None:
-        if not verify_password(current, user.password_hash):
+        if not await run_in_threadpool(verify_password, current, user.password_hash):
             raise BadRequestException(INCORRECT_CURRENT_PASSWORD)
-        user.password_hash = hash_password(new)
+        user.password_hash = await run_in_threadpool(hash_password, new)
         await self.session.execute(
             update(RefreshToken).where(RefreshToken.user_id == user.id).values(revoked=True)
         )
