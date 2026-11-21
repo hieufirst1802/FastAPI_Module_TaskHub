@@ -377,9 +377,26 @@ def test_anonymous_and_openapi(hub):
     c, *_ = hub
     assert c.get("/api/v1/workspaces").status_code == 401
     schema = c.get("/openapi.json").json()
-    assert "/api/v1/auth/refresh" in schema["paths"]
-    assert "/api/v1/projects/{pid}/tasks" in schema["paths"]
-    assert "HTTPBearer" in schema["components"]["securitySchemes"]
+    paths = schema["paths"]
+    bearer = schema["components"]["securitySchemes"]["HTTPBearer"]
+    assert (bearer["type"], bearer["scheme"], bearer["bearerFormat"]) == ("http", "bearer", "JWT")
+    assert "security" not in paths["/api/v1/auth/login"]["post"]
+    assert "security" not in paths["/api/v1/auth/refresh"]["post"]
+    for methods in paths.values():
+        for operation in methods.values():
+            assert operation["tags"] and operation["summary"] and operation["description"]
+
+    operation = paths["/api/v1/projects/{pid}/tasks"]["get"]
+    assert operation["security"] == [{"HTTPBearer": []}]
+    assert {"search", "status", "priority", "assignee_id", "page", "limit"} <= {
+        parameter["name"] for parameter in operation["parameters"]
+    }
+    errors = operation["responses"]
+    assert {"401", "404", "422", "500"} <= errors.keys()
+    assert "WWW-Authenticate" in errors["401"]["headers"]
+    for code, model in (("401", "ErrorResponse"), ("422", "ValidationErrorResponse")):
+        assert errors[code]["content"]["application/json"]["schema"]["$ref"].endswith(f"/{model}")
+    assert "content" not in paths["/api/v1/tasks/{tid}"]["delete"]["responses"]["204"]
 
 
 def test_downgrade_blocks_legacy_writes_and_unassigns_removed_member(hub):
@@ -491,6 +508,84 @@ def test_project_list_cache_hit_expiration_and_delete(hub, monkeypatch):
     assert len(calls) == 3
     assert c.delete(f"/api/v1/projects/{pid}", headers=h).status_code == 204
     assert c.get(url, headers=h).status_code == 404
+
+
+def test_project_task_search_combines_filters_and_pagination(hub):
+    c, users, *_ = hub
+    _, pid = seed(hub)
+    headers = users["owner"]["headers"]
+    url = f"/api/v1/projects/{pid}/tasks"
+    ids = []
+    for title, description, priority in (
+        ("Release 100%_ready", "", "HIGH"),
+        ("Checklist", "release 100%_READY", "HIGH"),
+        ("Release 100XXready", "", "HIGH"),
+        ("Release 100%_ready", "", "LOW"),
+    ):
+        response = c.post(
+            url,
+            headers=headers,
+            json={"title": title, "description": description, "priority": priority},
+        )
+        assert response.status_code == 201, response.text
+        ids.append(response.json()["id"])
+
+    params = {"search": "  100%_ReAdY  ", "priority": "HIGH", "status": "TODO", "limit": 1}
+    for page, identifier in enumerate(ids[:2], start=1):
+        result = c.get(url, headers=headers, params={**params, "page": page}).json()
+        assert result["total"] == 2
+        assert result["page"] == page
+        assert [item["id"] for item in result["items"]] == [identifier]
+    assert c.get(url, headers=headers, params={**params, "search": "check"}).json()["total"] == 1
+    assert c.get(url, headers=headers, params=params).json()["total"] == 2
+    assert c.get(url, headers=headers, params={"search": "x" * 201}).status_code == 422
+
+    response = c.patch(f"/api/v1/tasks/{ids[0]}", headers=headers, json={"status": "DONE"})
+    assert response.status_code == 200, response.text
+    assert c.get(url, headers=headers, params=params).json()["total"] == 1
+
+
+def test_standalone_task_search_cache_scope_and_invalidation(hub, monkeypatch):
+    from app.repositories.task import TaskRepository
+
+    c, users, *_ = hub
+    owner = users["owner"]["headers"]
+    viewer = users["viewer"]["headers"]
+    admin = users["admin"]["headers"]
+    url = "/api/tasks"
+    params = {"search": "audit", "completed": False, "offset": 0, "limit": 1}
+    calls = []
+    original = TaskRepository.page
+
+    async def counted(self, *args):
+        calls.append(1)
+        return await original(self, *args)
+
+    monkeypatch.setattr(TaskRepository, "page", counted)
+
+    def total(headers):
+        response = c.get(url, headers=headers, params=params)
+        assert response.status_code == 200, response.text
+        return response.json()["total"]
+
+    assert total(owner) == 0
+    created = c.post(url, headers=owner, json={"title": "Audit"})
+    assert created.status_code == 201, created.text
+    tid = created.json()["id"]
+    assert total(owner) == 1
+    assert total(owner) == 1
+    assert len(calls) == 2
+    assert total(viewer) == 0
+    assert total(admin) == 1
+
+    response = c.patch(f"{url}/{tid}", headers=owner, json={"completed": True})
+    assert response.status_code == 200, response.text
+    assert total(owner) == 0
+    assert total(admin) == 0
+    params["completed"] = True
+    assert total(owner) == 1
+    assert c.delete(f"{url}/{tid}", headers=owner).status_code == 204
+    assert total(owner) == 0
 
 
 def test_domain_lists_use_shared_pagination(hub):

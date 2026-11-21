@@ -14,7 +14,11 @@ from app.core.security import decode_access_token
 from app.models.user import User
 from app.repositories.user import UserRepository
 
-bearer_scheme = HTTPBearer(auto_error=False)
+bearer_scheme = HTTPBearer(
+    auto_error=False,
+    bearerFormat="JWT",
+    description="Paste the access_token returned by POST /api/v1/auth/login.",
+)
 
 CurrentCredentials = Annotated[
     HTTPAuthorizationCredentials | None,
