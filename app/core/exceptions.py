@@ -1,10 +1,11 @@
 from collections.abc import Mapping
+from http import HTTPStatus
 from typing import ClassVar
 
 from fastapi import status
 
 from app.core.enums import ErrorCode
-from app.core.messages import USERNAME_ALREADY_REGISTERED
+from app.core.messages import EMAIL_ALREADY_REGISTERED, USERNAME_ALREADY_REGISTERED
 
 
 class AppException(Exception):
@@ -33,6 +34,23 @@ class UsernameAlreadyExistsError(ConflictException):
 
     def __init__(self) -> None:
         super().__init__(USERNAME_ALREADY_REGISTERED)
+
+
+class EmailAlreadyExistsError(ConflictException):
+    code = ErrorCode.EMAIL_ALREADY_EXISTS
+
+    def __init__(self) -> None:
+        super().__init__(EMAIL_ALREADY_REGISTERED)
+
+
+class InvalidInputException(AppException):
+    status_code = HTTPStatus.UNPROCESSABLE_ENTITY
+    code = ErrorCode.VALIDATION_ERROR
+
+
+class BadRequestException(AppException):
+    status_code = status.HTTP_400_BAD_REQUEST
+    code = ErrorCode.BAD_REQUEST
 
 
 class UnauthorizedException(AppException):

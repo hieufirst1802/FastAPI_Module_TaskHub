@@ -1,57 +1,59 @@
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
+from typing import Any
 
 import jwt
 from pwdlib import PasswordHash
-from pwdlib.exceptions import UnknownHashError
 
-from app.core.config import Settings
-from app.core.messages import INVALID_TOKEN
+from app.core.config import Settings, get_settings
 
 password_hash = PasswordHash.recommended()
-DUMMY_HASH = password_hash.hash(uuid4().hex)
-ACCESS_TOKEN_TYPE = "access"
 
 
 def hash_password(password: str) -> str:
+    """Hash a plain-text password using Argon2."""
     return password_hash.hash(password)
 
 
 def verify_password(password: str, hashed_password: str) -> bool:
-    try:
-        return password_hash.verify(password, hashed_password)
-    except UnknownHashError:
-        password_hash.verify(password, DUMMY_HASH)
-        return False
+    """Verify a password against its stored hash."""
+    return password_hash.verify(password, hashed_password)
 
 
-def create_access_token(subject: str, settings: Settings) -> str:
-    issued_at = datetime.now(UTC)
+def create_access_token(
+    subject: str,
+    expires_delta: timedelta | None = None,
+    settings: Settings | None = None,
+) -> str:
+    """Create a signed JWT access token."""
+    settings = settings or get_settings()
+
+    expire = datetime.now(UTC) + (
+        expires_delta or timedelta(minutes=settings.access_token_expire_minutes)
+    )
+
+    payload: dict[str, Any] = {
+        "sub": subject,
+        "type": "access",
+        "exp": expire,
+    }
+
     return jwt.encode(
-        {
-            "sub": subject,
-            "iat": issued_at,
-            "exp": issued_at + timedelta(minutes=settings.access_token_expire_minutes),
-            "jti": uuid4().hex,
-            "type": ACCESS_TOKEN_TYPE,
-        },
-        settings.jwt_secret_key.get_secret_value(),
+        payload,
+        settings.jwt_secret_key,
         algorithm=settings.jwt_algorithm,
     )
 
 
-def decode_access_token(token: str, settings: Settings) -> int:
-    claims = jwt.decode(
-        token,
-        settings.jwt_secret_key.get_secret_value(),
-        algorithms=[settings.jwt_algorithm],
-        options={"require": ["sub", "exp", "iat", "type"]},
-    )
-    subject = claims["sub"]
-    if claims["type"] != ACCESS_TOKEN_TYPE or not isinstance(subject, str):
-        raise jwt.InvalidTokenError(INVALID_TOKEN)
+def decode_access_token(token: str, settings: Settings | None = None) -> dict[str, Any]:
+    """Decode and validate a JWT access token."""
+    settings = settings or get_settings()
 
-    user_id = int(subject)
-    if not 0 < user_id <= 2**63 - 1 or subject != str(user_id):
-        raise jwt.InvalidTokenError(INVALID_TOKEN)
-    return user_id
+    payload = jwt.decode(
+        token,
+        settings.jwt_secret_key,
+        algorithms=[settings.jwt_algorithm],
+        options={"require": ["sub", "exp", "type"]},
+    )
+    if payload.get("type") != "access":
+        raise jwt.InvalidTokenError("Wrong token type")
+    return payload

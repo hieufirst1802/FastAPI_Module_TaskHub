@@ -1,38 +1,40 @@
-from typing import Annotated, Self
-
-from pydantic import Field, model_validator
-
-from app.core.constants import DESCRIPTION_MAX_LENGTH, TITLE_MAX_LENGTH, TITLE_MIN_LENGTH
-from app.core.messages import NULL_UPDATE_FIELDS
-from app.models.enums import TaskStatus
-from app.schemas.base import BaseSchema
-
-TaskTitle = Annotated[str, Field(min_length=TITLE_MIN_LENGTH, max_length=TITLE_MAX_LENGTH)]
-TaskDescription = Annotated[str, Field(max_length=DESCRIPTION_MAX_LENGTH)]
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-class TaskBase(BaseSchema):
-    title: TaskTitle
-    description: TaskDescription = ""
-    status: TaskStatus = TaskStatus.TODO
+class TaskCreate(BaseModel):
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        extra="forbid",
+    )
+
+    title: str = Field(min_length=1, max_length=200)
+    description: str = Field(default="", max_length=10000)
+    completed: bool = False
 
 
-class TaskCreate(TaskBase):
-    pass
+class TaskUpdate(BaseModel):
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        extra="forbid",
+    )
 
-
-class TaskUpdate(BaseSchema):
-    title: TaskTitle | None = None
-    description: TaskDescription | None = None
-    status: TaskStatus | None = None
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=10000)
+    completed: bool | None = None
 
     @model_validator(mode="after")
-    def non_null(self) -> Self:
+    def non_null(self) -> "TaskUpdate":
         if any(getattr(self, name) is None for name in self.model_fields_set):
-            raise ValueError(NULL_UPDATE_FIELDS)
+            raise ValueError("Fields cannot be null; omit unchanged fields")
         return self
 
 
-class TaskOut(TaskBase):
+class TaskOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
+    title: str
+    description: str
+    completed: bool
+    project_id: int | None = None
     owner_id: int

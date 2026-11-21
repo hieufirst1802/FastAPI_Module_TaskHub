@@ -1,6 +1,5 @@
 from app.models.user import User
 from app.repositories.user import UserRepository
-from app.schemas.pagination import PaginationParams
 
 
 class UserService:
@@ -9,6 +8,7 @@ class UserService:
 
     async def page(
         self,
-        pagination: PaginationParams,
+        offset: int,
+        limit: int,
     ) -> tuple[list[User], int]:
-        return await self.user_repository.page(pagination)
+        return await self.user_repository.page(offset, limit)

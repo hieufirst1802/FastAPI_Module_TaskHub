@@ -1,0 +1,1 @@
+Archived Day 1 in-memory examples. Git history: 064067d. Runtime imports resolve to app/api/, app/repositories/, app/services/, app/schemas/. No active imports reference these standalone modules. Saved as .txt to avoid import ambiguity; not executable application code.

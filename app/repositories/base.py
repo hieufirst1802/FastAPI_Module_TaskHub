@@ -5,7 +5,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.models.base import Base
-from app.schemas.pagination import PaginationParams
 
 
 class BaseRepository[T: Base]:
@@ -18,7 +17,8 @@ class BaseRepository[T: Base]:
 
     async def page(
         self,
-        pagination: PaginationParams,
+        offset: int,
+        limit: int,
         *filters: ColumnElement[bool],
     ) -> tuple[list[T], int]:
         total = await self.session.scalar(
@@ -29,8 +29,8 @@ class BaseRepository[T: Base]:
             select(self.model)
             .where(*filters)
             .order_by(self.model.__table__.c.id)
-            .offset(pagination.offset)
-            .limit(pagination.limit)
+            .offset(offset)
+            .limit(limit)
         )
 
         result = await self.session.scalars(statement)
@@ -40,7 +40,7 @@ class BaseRepository[T: Base]:
     async def create(self, **values: Any) -> T:
         entity = self.model(**values)
         self.session.add(entity)
-        await self.session.flush()
+        await self.session.commit()
         await self.session.refresh(entity)
         return entity
 
@@ -48,10 +48,10 @@ class BaseRepository[T: Base]:
         for key, value in values.items():
             setattr(entity, key, value)
 
-        await self.session.flush()
+        await self.session.commit()
         await self.session.refresh(entity)
         return entity
 
     async def delete(self, entity: T) -> None:
         await self.session.delete(entity)
-        await self.session.flush()
+        await self.session.commit()

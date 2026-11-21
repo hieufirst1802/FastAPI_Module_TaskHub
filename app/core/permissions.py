@@ -3,7 +3,7 @@ from collections.abc import Awaitable, Callable
 from app.core.dependencies import CurrentUser
 from app.core.exceptions import ForbiddenException
 from app.core.messages import ACCESS_FORBIDDEN
-from app.models.enums import UserRole
+from app.enums import UserRole
 from app.models.user import User
 
 
