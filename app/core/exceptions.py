@@ -1,21 +1,10 @@
-from app.core.messages import TASK_NOT_FOUND
+from fastapi import Request, status
+from fastapi.responses import JSONResponse
 
 
-class AppException(Exception):
-    def __init__(
-        self,
-        message: str,
-        status_code: int,
-    ) -> None:
-        self.message = message
-        self.status_code = status_code
-        super().__init__(message)
+class NotFoundException(Exception):
+    pass
 
 
-class NotFoundException(AppException):
-    def __init__(self, task_id: int) -> None:
-        self.task_id = task_id
-        super().__init__(
-            message=TASK_NOT_FOUND,
-            status_code=404,
-        )
+async def handle_not_found(request: Request, exc: Exception) -> JSONResponse:
+    return JSONResponse(status_code=status.HTTP_404_NOT_FOUND, content={"detail": str(exc)})

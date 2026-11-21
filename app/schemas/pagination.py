@@ -1,28 +1,23 @@
-from pydantic import BaseModel, Field
+from dataclasses import dataclass
+from typing import Annotated
 
-from app.core.constants import (
-    DEFAULT_PAGE_LIMIT,
-    DEFAULT_PAGE_OFFSET,
-    MAX_PAGE_LIMIT,
-)
+from fastapi import Depends, Query
+
+from app.core.constants import DEFAULT_LIMIT, DEFAULT_OFFSET, MAX_LIMIT, MIN_LIMIT
 from app.schemas.base import BaseSchema
-from app.schemas.task import TaskOut
 
 
-class PaginationParams(BaseModel):
-    offset: int = Field(
-        default=DEFAULT_PAGE_OFFSET,
-        ge=0,
-    )
-    limit: int = Field(
-        default=DEFAULT_PAGE_LIMIT,
-        ge=1,
-        le=MAX_PAGE_LIMIT,
-    )
+@dataclass(frozen=True)
+class PaginationParams:
+    offset: Annotated[int, Query(ge=DEFAULT_OFFSET)] = DEFAULT_OFFSET
+    limit: Annotated[int, Query(ge=MIN_LIMIT, le=MAX_LIMIT)] = DEFAULT_LIMIT
 
 
-class TaskPage(BaseSchema):
-    items: list[TaskOut]
-    total: int = Field(ge=0)
-    offset: int = Field(ge=0)
-    limit: int = Field(ge=1)
+Pagination = Annotated[PaginationParams, Depends()]
+
+
+class Page[T](BaseSchema):
+    items: list[T]
+    total: int
+    offset: int
+    limit: int

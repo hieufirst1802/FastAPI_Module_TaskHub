@@ -1,38 +1,46 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from app.api.v1.endpoints.health import router as health_router
 from app.api.v1.router import router
-from app.core.constants import APP_TITLE
-from app.core.exceptions import AppException
-from app.repositories.task import TaskRepository
+from app.core.config import Settings, get_settings
+from app.core.database import create_engine
+from app.core.exceptions import NotFoundException, handle_not_found
 
 
-def create_app() -> FastAPI:
+def create_app(settings: Settings | None = None) -> FastAPI:
+    config = settings or get_settings()
+
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        app.state.repository = TaskRepository()
-        yield
+        engine = create_engine(config.database_url)
+
+        app.state.settings = config
+        app.state.engine = engine
+        app.state.sessions = async_sessionmaker(
+            engine,
+            expire_on_commit=False,
+        )
+
+        try:
+            async with engine.connect() as connection:
+                await connection.execute(text("SELECT 1"))
+
+            yield
+        finally:
+            await engine.dispose()
 
     app = FastAPI(
-        title=APP_TITLE,
-        description="FastAPI CRUD with layered architecture",
-        version="1.0.0",
+        title="TaskHub - Bai 2 Database",
         lifespan=lifespan,
     )
 
-    @app.exception_handler(AppException)
-    async def app_exception_handler(
-        request: Request,
-        exc: AppException,
-    ) -> JSONResponse:
-        return JSONResponse(
-            status_code=exc.status_code,
-            content={"detail": exc.message},
-        )
-
+    app.add_exception_handler(NotFoundException, handle_not_found)
+    app.include_router(health_router)
     app.include_router(router)
 
     return app

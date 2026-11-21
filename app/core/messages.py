@@ -1,3 +1,3 @@
 TASK_NOT_FOUND = "Task not found"
-
-TASK_NULL_UPDATE = "Omit unchanged fields; null is not allowed"
+DEMO_OWNER_NOT_FOUND = "Demo user not found. Run the database migrations."
+NULL_UPDATE_FIELDS = "Fields cannot be null. Omit unchanged fields."
