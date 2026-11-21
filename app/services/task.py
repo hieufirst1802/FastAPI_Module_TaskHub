@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import transaction
 from app.core.exceptions import NotFoundException
 from app.core.messages import TASK_NOT_FOUND
+from app.models.enums import UserRole
 from app.models.task import Task
 from app.models.user import User
 from app.repositories.task import TaskRepository
@@ -19,21 +20,28 @@ class TaskService:
         async with transaction(self.session):
             return await self.task_repository.create(**data.model_dump(), owner_id=current_user.id)
 
-    async def page(self, pagination: PaginationParams, owner_id: int) -> tuple[list[Task], int]:
-        return await self.task_repository.page(pagination, Task.owner_id == owner_id)
+    async def page(
+        self, pagination: PaginationParams, current_user: User
+    ) -> tuple[list[Task], int]:
+        if current_user.role == UserRole.ADMIN:
+            return await self.task_repository.page(pagination)
+        return await self.task_repository.page(pagination, Task.owner_id == current_user.id)
 
-    async def get(self, task_id: int, owner_id: int) -> Task:
-        task = await self.task_repository.get(task_id)
-        if task is None or task.owner_id != owner_id:
+    async def get(self, task_id: int, current_user: User) -> Task:
+        if current_user.role == UserRole.ADMIN:
+            task = await self.task_repository.get(task_id)
+        else:
+            task = await self.task_repository.get_by_owner(task_id, current_user.id)
+        if task is None:
             raise NotFoundException(TASK_NOT_FOUND)
         return task
 
-    async def update(self, task_id: int, data: TaskUpdate, owner_id: int) -> Task:
+    async def update(self, task_id: int, data: TaskUpdate, current_user: User) -> Task:
         async with transaction(self.session):
-            task = await self.get(task_id, owner_id)
+            task = await self.get(task_id, current_user)
             return await self.task_repository.update(task, data.model_dump(exclude_unset=True))
 
-    async def delete(self, task_id: int, owner_id: int) -> None:
+    async def delete(self, task_id: int, current_user: User) -> None:
         async with transaction(self.session):
-            task = await self.get(task_id, owner_id)
+            task = await self.get(task_id, current_user)
             await self.task_repository.delete(task)

@@ -44,7 +44,7 @@ async def create_task(
 async def list_tasks(
     service: TaskServiceDependency, pagination: Pagination, user: CurrentUser
 ) -> Page[TaskOut]:
-    rows, total = await service.page(pagination, user.id)
+    rows, total = await service.page(pagination, user)
     return Page[TaskOut](
         items=[TaskOut.model_validate(task) for task in rows],
         total=total,
@@ -57,7 +57,7 @@ async def list_tasks(
     "/{task_id}", response_model=TaskOut, summary="Get a task", responses=NOT_FOUND_RESPONSE
 )
 async def get_task(task_id: TaskId, service: TaskServiceDependency, user: CurrentUser) -> TaskOut:
-    return TaskOut.model_validate(await service.get(task_id, user.id))
+    return TaskOut.model_validate(await service.get(task_id, user))
 
 
 @router.patch(
@@ -66,7 +66,7 @@ async def get_task(task_id: TaskId, service: TaskServiceDependency, user: Curren
 async def update_task(
     task_id: TaskId, data: TaskUpdate, service: TaskServiceDependency, user: CurrentUser
 ) -> TaskOut:
-    return TaskOut.model_validate(await service.update(task_id, data, user.id))
+    return TaskOut.model_validate(await service.update(task_id, data, user))
 
 
 @router.delete(
@@ -78,5 +78,5 @@ async def update_task(
 async def delete_task(
     task_id: TaskId, service: TaskServiceDependency, user: CurrentUser
 ) -> Response:
-    await service.delete(task_id, user.id)
+    await service.delete(task_id, user)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

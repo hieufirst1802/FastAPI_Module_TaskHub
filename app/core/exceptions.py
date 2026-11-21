@@ -20,6 +20,10 @@ class ConflictException(AppException):
     status_code = status.HTTP_409_CONFLICT
 
 
+class ForbiddenException(AppException):
+    status_code = status.HTTP_403_FORBIDDEN
+
+
 class UsernameAlreadyExistsError(ConflictException):
     def __init__(self) -> None:
         super().__init__(USERNAME_ALREADY_REGISTERED)

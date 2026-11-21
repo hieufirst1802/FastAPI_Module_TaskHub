@@ -35,7 +35,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             await engine.dispose()
 
     app = FastAPI(
-        title="TaskHub - Bai 3 Authentication",
+        title="TaskHub - Bai 4 Authorization",
         lifespan=lifespan,
     )
 

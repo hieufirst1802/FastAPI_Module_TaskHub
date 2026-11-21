@@ -1,10 +1,11 @@
-# Bài 3 — JWT Authentication
+# Bài 4 — Authorization và RBAC
 
-Nhánh thực hiện: `lesson-3-authentication`
+Nhánh thực hiện: `lesson-4-authorization`
 
 ## 1. Mục tiêu
 
-Mở rộng Bài 2 với đăng ký, đăng nhập bằng JWT và kiểm tra chủ sở hữu khi truy cập Task.
+Mở rộng Bài 3 với hai vai trò hệ thống `ADMIN` và `MEMBER` và kiểm tra chủ sở hữu Task.
+Phạm vi hiện tại gồm User và Task. Bộ kiểm thử tích hợp chạy trên SQLite.
 
 Các mục tiêu chính:
 
@@ -26,7 +27,8 @@ app/
 │       ├── endpoints/
 │       │   ├── auth.py
 │       │   ├── health.py
-│       │   └── tasks.py
+│       │   ├── tasks.py
+│       │   └── users.py
 │       └── router.py
 ├── core/
 │   ├── config.py
@@ -35,6 +37,7 @@ app/
 │   ├── dependencies.py
 │   ├── exceptions.py
 │   ├── messages.py
+│   ├── permissions.py
 │   └── security.py
 ├── models/
 │   ├── base.py
@@ -52,7 +55,8 @@ app/
 │   └── task.py
 ├── services/
 │   ├── auth.py
-│   └── task.py
+│   ├── task.py
+│   └── user.py
 └── main.py
 
 migrations/
@@ -62,6 +66,7 @@ migrations/
 tests/
 ├── conftest.py
 ├── test_auth.py
+├── test_authorization.py
 ├── test_health.py
 ├── test_pagination.py
 ├── test_persistence.py
@@ -154,6 +159,7 @@ Truy cập:
 | POST | `/api/v1/auth/register` | Đăng ký |
 | POST | `/api/v1/auth/login` | Đăng nhập và nhận access token |
 | GET | `/api/v1/auth/me` | Xem tài khoản hiện tại |
+| GET | `/api/v1/users` | Liệt kê tài khoản có phân trang, dành cho admin |
 | POST | `/api/v1/tasks` | Tạo Task |
 | GET | `/api/v1/tasks` | Lấy danh sách Task có phân trang |
 | GET | `/api/v1/tasks/{task_id}` | Lấy chi tiết Task |
@@ -161,8 +167,9 @@ Truy cập:
 | DELETE | `/api/v1/tasks/{task_id}` | Xóa Task |
 | GET | `/health` | Kiểm tra ứng dụng và database |
 
-Gửi `Authorization: Bearer <access_token>` cho `/auth/me` và các API Task. Mỗi tài khoản
-chỉ truy cập Task của mình. Khi tạo Task, hệ thống lấy chủ sở hữu từ tài khoản đang đăng nhập.
+Gửi `Authorization: Bearer <access_token>` cho các API yêu cầu đăng nhập. Member chỉ truy cập
+Task của mình. Admin có thể xem, cập nhật và xóa Task của mọi người dùng. Khi tạo Task, hệ thống
+lấy chủ sở hữu từ tài khoản đang đăng nhập. Đăng ký công khai luôn tạo tài khoản member.
 Migration vô hiệu hóa tài khoản demo cũ có mật khẩu `disabled-login` và giữ lại dữ liệu liên quan.
 
 API danh sách hỗ trợ:
