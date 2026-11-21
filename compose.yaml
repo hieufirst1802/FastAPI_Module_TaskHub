@@ -4,6 +4,7 @@ services:
     ports:
       - "127.0.0.1:8000:8000"
     environment:
+      ENVIRONMENT: ${ENVIRONMENT:-development}
       DATABASE_URL: postgresql+asyncpg://taskhub:${POSTGRES_PASSWORD:-taskhub_dev}@db:5432/taskhub
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-local-compose-change-this-secret-key-before-deploying}
       REDIS_URL: redis://redis:6379/0

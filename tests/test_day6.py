@@ -17,6 +17,15 @@ from app.schemas.workspace import ProjectTaskOut
 from app.services.task import TaskService
 
 
+@pytest.mark.parametrize("environment", ["staging", "production"])
+def test_deployed_jwt_settings_require_non_default_secret(environment):
+    with pytest.raises(ValidationError, match="JWT_SECRET_KEY"):
+        Settings(environment=environment, jwt_secret_key="replace-with-a-long-random-secret")
+    assert Settings(environment=environment, jwt_secret_key="test-secret-" * 4).jwt_algorithm == (
+        "HS256"
+    )
+
+
 @pytest.fixture
 def cached_service(redis):
     cache = TaskCache(redis, ttl=10, prefix="test:detail")

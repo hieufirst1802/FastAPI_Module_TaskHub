@@ -265,7 +265,7 @@ Bộ kiểm thử bao gồm:
 
 ### Kết quả kiểm thử hiện tại
 
-- **36 bài kiểm thử thành công (36 tests passed).**
+- **43 bài kiểm thử thành công**, gồm đường nâng cấp database từ Bài 2–5 và kiểm tra cấu hình JWT khi triển khai.
 - **Ruff: All checks passed** – Không phát hiện lỗi từ Ruff.
 - Còn một cảnh báo Deprecation liên quan đến Starlette/httpx.
 
