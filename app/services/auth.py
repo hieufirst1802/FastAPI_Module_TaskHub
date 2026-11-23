@@ -4,10 +4,10 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import jwt
+from anyio import CapacityLimiter, to_thread
 from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from starlette.concurrency import run_in_threadpool
 
 from app.core.config import Settings, get_settings
 from app.core.exceptions import (
@@ -28,6 +28,14 @@ from app.models.refresh_token import RefreshToken
 from app.models.user import User
 from app.repositories.user import UserRepository
 from app.schemas.auth import TokenResponse
+
+# Each Argon2 operation uses 64 MiB with the current pwdlib parameters.
+_PASSWORD_LIMITER = CapacityLimiter(4)
+# Precomputed with the same Argon2 parameters as user password hashes.
+_DUMMY_PASSWORD_HASH = (
+    "$argon2id$v=19$m=65536,t=3,p=4$oZjmm1bBgpN0QCglhsywaQ"
+    "$tG4GW2E5XZvZ2l7wQH7sqdlaXwrO7kSp65XKfpQombg"
+)
 
 
 class AuthService:
@@ -53,7 +61,9 @@ class AuthService:
                 username=username,
                 email=email,
                 full_name=full_name,
-                password_hash=await run_in_threadpool(hash_password, password),
+                password_hash=await to_thread.run_sync(
+                    hash_password, password, limiter=_PASSWORD_LIMITER
+                ),
                 role=UserRole.MEMBER,
             )
         except IntegrityError as exc:
@@ -73,10 +83,12 @@ class AuthService:
     ) -> User | None:
         user = await self.users.by_username(username)
 
-        if user is None or not user.is_active:
-            return None
+        encoded = user.password_hash if user is not None else _DUMMY_PASSWORD_HASH
+        verified = await to_thread.run_sync(
+            verify_password, password, encoded, limiter=_PASSWORD_LIMITER
+        )
 
-        if not await run_in_threadpool(verify_password, password, user.password_hash):
+        if user is None or not user.is_active or not verified:
             return None
 
         return user
@@ -145,9 +157,11 @@ class AuthService:
         await self.session.commit()
 
     async def change_password(self, user: User, current: str, new: str) -> None:
-        if not await run_in_threadpool(verify_password, current, user.password_hash):
+        if not await to_thread.run_sync(
+            verify_password, current, user.password_hash, limiter=_PASSWORD_LIMITER
+        ):
             raise BadRequestException(INCORRECT_CURRENT_PASSWORD)
-        user.password_hash = await run_in_threadpool(hash_password, new)
+        user.password_hash = await to_thread.run_sync(hash_password, new, limiter=_PASSWORD_LIMITER)
         await self.session.execute(
             update(RefreshToken).where(RefreshToken.user_id == user.id).values(revoked=True)
         )

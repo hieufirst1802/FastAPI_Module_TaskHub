@@ -10,6 +10,7 @@ annotated-types==0.8.0
     # via pydantic
 anyio==4.16.0
     # via
+    #   fastapi-practice
     #   starlette
     #   watchfiles
 argon2-cffi==25.1.0

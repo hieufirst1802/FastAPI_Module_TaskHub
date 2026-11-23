@@ -8,7 +8,7 @@ Các đường nâng cấp Alembic từ Bài 2 và Bài 3–5 có test giữ d�
 
 ## Thay đổi hiệu năng
 
-Băm và kiểm tra mật khẩu bằng Argon2 chạy trong thread pool của Starlette để tránh chiếm event loop khi đăng ký, đăng nhập hoặc đổi mật khẩu. Test mới xác nhận bước kiểm tra mật khẩu chạy ở thread khác với event loop. Luồng nghiệp vụ và định dạng token giữ nguyên.
+Băm và kiểm tra mật khẩu bằng Argon2 chạy trên luồng riêng qua AnyIO. Đăng ký, đăng nhập và đổi mật khẩu dùng chung một giới hạn 4 tác vụ Argon2 đồng thời trên mỗi worker. Đăng nhập với tên người dùng không tồn tại vẫn kiểm tra mật khẩu với một hash giả lập để giảm chênh lệch thời gian phản hồi. Kiểm thử xác nhận cả ba luồng thực hiện các bước Argon2 ngoài event loop.
 
 Danh sách task giới hạn 100 mục mỗi trang, sắp xếp theo ID và dùng Redis cho truy vấn lặp lại. Truy vấn tìm theo chuỗi con, đếm tổng số kết quả và phân trang với offset lớn vẫn có thể tốn thời gian trên tập dữ liệu lớn. Chưa đo tải đồng thời, latency hoặc mức dùng bộ nhớ của Argon2 trên môi trường triển khai.
 
