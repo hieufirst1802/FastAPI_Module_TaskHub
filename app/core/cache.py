@@ -1,8 +1,10 @@
 """Best-effort async cache. SQL remains the source of truth."""
 
 import logging
+from collections.abc import Awaitable, Callable, Mapping
 from hashlib import sha256
 from json import dumps
+from typing import Any
 from uuid import uuid4
 
 from pydantic import BaseModel, ValidationError
@@ -45,17 +47,37 @@ class TaskCache:
     def project_version_key(self, project_id: int) -> str:
         return f"{self.prefix}:projects:{project_id}:version"
 
-    def standalone_version_key(self) -> str:
-        return f"{self.prefix}:tasks:standalone:version"
+    def standalone_version_key(self, owner_id: int | None) -> str:
+        scope = "admin" if owner_id is None else f"owners:{owner_id}"
+        return f"{self.prefix}:tasks:standalone:{scope}:version"
 
-    def page_key(
+    async def invalidate_standalone(self, owner_id: int) -> None:
+        await self.bump_version(self.standalone_version_key(owner_id))
+        await self.bump_version(self.standalone_version_key(None))
+
+    def page_key(self, version_key: str, version: str, params: Mapping[str, Any]) -> str:
+        digest = sha256(dumps(dict(params), sort_keys=True).encode()).hexdigest()
+        return f"{version_key.removesuffix(':version')}:page:{version}:{digest}"
+
+    async def get_or_load[T: BaseModel](
         self,
-        scope: str,
-        version: str,
-        *parameters: str | int | bool | None,
-    ) -> str:
-        digest = sha256(dumps(parameters).encode()).hexdigest()
-        return f"{self.prefix}:{scope}:page:{version}:{digest}"
+        version_key: str,
+        params: Mapping[str, Any],
+        schema: type[T],
+        loader: Callable[[], Awaitable[T]],
+    ) -> T:
+        version = await self.version(version_key)
+        if version is None:
+            return await loader()
+
+        key = self.page_key(version_key, version, params)
+        cached = await self.get(key, schema)
+        if cached is not None:
+            return cached
+
+        result = await loader()
+        await self.set(key, result)
+        return result
 
     async def version(self, key: str) -> str | None:
         if self.client is None:

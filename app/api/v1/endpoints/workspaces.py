@@ -297,10 +297,9 @@ async def tasks(
     pid: int,
     service: WorkspaceServiceDep,
     user: CurrentUser,
-    pagination: PaginationDep,
     query: Annotated[ProjectTaskFilters, Query()],
 ) -> Page[ProjectTaskOut]:
-    return await service.task_page(pid, user, pagination, query)
+    return await service.task_page(pid, user, query)
 
 
 @router.get(

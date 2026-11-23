@@ -34,7 +34,7 @@ from app.enums import ProjectStatus, TaskStatus, UserRole, WorkspaceRole
 from app.models.task import Task
 from app.models.user import User
 from app.models.workspace import Comment, Label, Project, TaskLabel, Workspace, WorkspaceMember
-from app.repositories.task import task_filters
+from app.repositories.task import task_search_filters
 from app.repositories.workspace import DomainRepository, MembershipRepository
 from app.schemas.auth import ProfileUpdate
 from app.schemas.pagination import Page, PaginationParams
@@ -318,42 +318,35 @@ class WorkspaceService:
         self,
         pid: int,
         user: User,
-        pagination: PaginationParams,
         query: ProjectTaskFilters,
     ) -> Page[ProjectTaskOut]:
         await self.project(pid, user)
-        cache = self.cache
-        key = None
-        if cache is not None:
-            version = await cache.version(cache.project_version_key(pid))
-            if version is not None:
-                key = cache.page_key(
-                    f"projects:{pid}:tasks",
-                    version,
-                    pagination.page,
-                    pagination.limit,
-                    query.search or None,
-                    query.status,
-                    query.priority,
-                    query.assignee_id,
-                )
-                cached = await cache.get(key, Page[ProjectTaskOut])
-                if cached is not None:
-                    return cached
-        filters = task_filters(query)
+        if self.cache is None:
+            return await self._load_task_page(pid, query)
+        return await self.cache.get_or_load(
+            self.cache.project_version_key(pid),
+            query.model_dump(mode="json"),
+            Page[ProjectTaskOut],
+            lambda: self._load_task_page(pid, query),
+        )
+
+    async def _load_task_page(self, pid: int, query: ProjectTaskFilters) -> Page[ProjectTaskOut]:
+        pagination = PaginationParams(page=query.page, limit=query.limit)
+        filters = task_search_filters(query.search)
         filters.append(Task.project_id == pid)
+        if query.status is not None:
+            filters.append(Task.status == query.status)
+        if query.priority is not None:
+            filters.append(Task.priority == query.priority)
         if query.assignee_id is not None:
             filters.append(Task.assignee_id == query.assignee_id)
         rows, total = await self.tasks.page(pagination.offset, pagination.limit, *filters)
-        result = Page[ProjectTaskOut](
+        return Page[ProjectTaskOut](
             items=[ProjectTaskOut.model_validate(t) for t in rows],
             total=total,
             page=pagination.page,
             limit=pagination.limit,
         )
-        if cache is not None and key is not None:
-            await cache.set(key, result)
-        return result
 
     async def label_list(self, pid: int, user: User) -> list[Label]:
         await self.project(pid, user)

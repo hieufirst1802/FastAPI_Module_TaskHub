@@ -24,3 +24,14 @@ LABEL_ALREADY_EXISTS = "Label name already exists in project"
 LABEL_NOT_FOUND = "Label not found"
 LABEL_PROJECT_MISMATCH = "Label and task must belong to the same project"
 COMMENT_NOT_FOUND = "Comment not found"
+
+
+ERROR_DESCRIPTIONS = {
+    400: "The request could not be applied.",
+    401: "Credentials are missing, invalid, expired, or revoked.",
+    403: "The account does not have permission to perform this operation.",
+    404: "The resource does not exist or is not visible to this account.",
+    409: "The operation conflicts with the current state of the resource.",
+    422: "The request failed field validation or a domain input rule.",
+    500: "An unexpected server error occurred.",
+}

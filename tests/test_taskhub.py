@@ -538,7 +538,13 @@ def test_project_task_search_combines_filters_and_pagination(hub):
         assert [item["id"] for item in result["items"]] == [identifier]
     assert c.get(url, headers=headers, params={**params, "search": "check"}).json()["total"] == 1
     assert c.get(url, headers=headers, params=params).json()["total"] == 2
-    assert c.get(url, headers=headers, params={"search": "x" * 201}).status_code == 422
+    for invalid in (
+        {"search": "x" * 201},
+        {"status": "UNKNOWN"},
+        {"priority": "UNKNOWN"},
+        {"unknown": "value"},
+    ):
+        assert c.get(url, headers=headers, params=invalid).status_code == 422
 
     response = c.patch(f"/api/v1/tasks/{ids[0]}", headers=headers, json={"status": "DONE"})
     assert response.status_code == 200, response.text
@@ -569,23 +575,85 @@ def test_standalone_task_search_cache_scope_and_invalidation(hub, monkeypatch):
         return response.json()["total"]
 
     assert total(owner) == 0
+    assert total(viewer) == 0
+    assert total(admin) == 0
     created = c.post(url, headers=owner, json={"title": "Audit"})
     assert created.status_code == 201, created.text
     tid = created.json()["id"]
-    assert total(owner) == 1
-    assert total(owner) == 1
-    assert len(calls) == 2
-    assert total(viewer) == 0
-    assert total(admin) == 1
 
-    response = c.patch(f"{url}/{tid}", headers=owner, json={"completed": True})
+    def assert_totals(owner_total, admin_total):
+        previous_calls = len(calls)
+        assert total(viewer) == 0
+        assert len(calls) == previous_calls
+        assert total(owner) == owner_total
+        assert total(admin) == admin_total
+        assert len(calls) == previous_calls + 2
+        assert total(owner) == owner_total
+        assert total(admin) == admin_total
+        assert len(calls) == previous_calls + 2
+
+    assert_totals(1, 1)
+    response = c.patch(f"{url}/{tid}", headers=admin, json={"completed": True})
     assert response.status_code == 200, response.text
-    assert total(owner) == 0
-    assert total(admin) == 0
+    assert_totals(0, 0)
+
     params["completed"] = True
+    assert total(viewer) == 0
     assert total(owner) == 1
-    assert c.delete(f"{url}/{tid}", headers=owner).status_code == 204
-    assert total(owner) == 0
+    assert total(admin) == 1
+    assert c.delete(f"{url}/{tid}", headers=admin).status_code == 204
+    assert_totals(0, 0)
+
+
+def test_standalone_task_query_rejects_invalid_parameters(hub):
+    c, users, *_ = hub
+    headers = users["owner"]["headers"]
+    for params in (
+        {"status": "UNKNOWN"},
+        {"status": "TODO"},
+        {"priority": "UNKNOWN"},
+        {"priority": "HIGH"},
+        {"completed": "maybe"},
+        {"limit": 101},
+        {"search": "x" * 201},
+        {"offset": 10_001},
+        {"unknown": "value"},
+    ):
+        response = c.get("/api/tasks", headers=headers, params=params)
+        assert response.status_code == 422, response.text
+        assert ["query", next(iter(params))] in [
+            issue["loc"] for issue in response.json()["error"]["details"]
+        ]
+
+    response = c.get("/api/tasks", headers=headers, params={"offset": 10_000})
+    assert response.status_code == 200, response.text
+    assert response.json()["offset"] == 10_000
+
+
+def test_standalone_task_search_treats_wildcards_as_literals(hub):
+    c, users, *_ = hub
+    headers = users["owner"]["headers"]
+    url = "/api/tasks"
+    ids = []
+    for payload in (
+        {"title": "Release 100%_ready"},
+        {"title": "Checklist", "description": "release 100%_READY"},
+        {"title": "Release 100X_ready"},
+        {"title": "Release 100%Xready"},
+    ):
+        created = c.post(url, headers=headers, json=payload)
+        assert created.status_code == 201, created.text
+        ids.append(created.json()["id"])
+
+    for offset in range(2):
+        response = c.get(
+            url, headers=headers, params={"search": "  100%_ReAdY  ", "offset": offset, "limit": 1}
+        )
+        assert response.status_code == 200, response.text
+        result = response.json()
+        assert result["total"] == 2
+        assert result["offset"] == offset
+        assert [item["id"] for item in result["items"]] == [ids[offset]]
 
 
 def test_domain_lists_use_shared_pagination(hub):
