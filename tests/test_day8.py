@@ -1,9 +1,21 @@
+import subprocess
+import sys
 from threading import get_ident
 from unittest.mock import AsyncMock
 
 from app.models.user import User
 from app.services import auth
 from app.services.auth import AuthService
+
+
+def test_app_import_does_not_create_password_limiter():
+    script = (
+        "from unittest.mock import patch\n"
+        "with patch('anyio.CapacityLimiter', "
+        "side_effect=RuntimeError('CapacityLimiter requires an async backend')):\n"
+        "    import app.main\n"
+    )
+    subprocess.run([sys.executable, "-c", script], check=True, timeout=15)
 
 
 async def test_authentication_verifies_password_outside_event_loop(settings, monkeypatch):
