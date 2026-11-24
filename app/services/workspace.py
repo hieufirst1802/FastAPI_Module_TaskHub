@@ -30,13 +30,15 @@ from app.core.messages import (
     PROJECT_TASK_NOT_FOUND,
     WORKSPACE_NOT_FOUND,
 )
-from app.enums import Priority, ProjectStatus, TaskStatus, UserRole, WorkspaceRole
+from app.enums import ProjectStatus, TaskStatus, UserRole, WorkspaceRole
 from app.models.task import Task
 from app.models.user import User
 from app.models.workspace import Comment, Label, Project, TaskLabel, Workspace, WorkspaceMember
+from app.repositories.task import task_search_filters
 from app.repositories.workspace import DomainRepository, MembershipRepository
 from app.schemas.auth import ProfileUpdate
 from app.schemas.pagination import Page, PaginationParams
+from app.schemas.task import ProjectTaskFilters
 from app.schemas.workspace import (
     LabelInput,
     ProjectInput,
@@ -316,40 +318,35 @@ class WorkspaceService:
         self,
         pid: int,
         user: User,
-        pagination: PaginationParams,
-        status: TaskStatus | None,
-        priority: Priority | None,
-        assignee_id: int | None,
+        query: ProjectTaskFilters,
     ) -> Page[ProjectTaskOut]:
         await self.project(pid, user)
-        cache = self.cache
-        key = None
-        if cache is not None:
-            version = await cache.version(cache.project_version_key(pid))
-            if version is not None:
-                key = cache.project_page_key(
-                    pid, version, pagination.page, pagination.limit, status, priority, assignee_id
-                )
-                cached = await cache.get(key, Page[ProjectTaskOut])
-                if cached is not None:
-                    return cached
-        filters = [Task.project_id == pid]
-        if status is not None:
-            filters.append(Task.status == status)
-        if priority is not None:
-            filters.append(Task.priority == priority)
-        if assignee_id is not None:
-            filters.append(Task.assignee_id == assignee_id)
+        if self.cache is None:
+            return await self._load_task_page(pid, query)
+        return await self.cache.get_or_load(
+            self.cache.project_version_key(pid),
+            query.model_dump(mode="json"),
+            Page[ProjectTaskOut],
+            lambda: self._load_task_page(pid, query),
+        )
+
+    async def _load_task_page(self, pid: int, query: ProjectTaskFilters) -> Page[ProjectTaskOut]:
+        pagination = PaginationParams(page=query.page, limit=query.limit)
+        filters = task_search_filters(query.search)
+        filters.append(Task.project_id == pid)
+        if query.status is not None:
+            filters.append(Task.status == query.status)
+        if query.priority is not None:
+            filters.append(Task.priority == query.priority)
+        if query.assignee_id is not None:
+            filters.append(Task.assignee_id == query.assignee_id)
         rows, total = await self.tasks.page(pagination.offset, pagination.limit, *filters)
-        result = Page[ProjectTaskOut](
+        return Page[ProjectTaskOut](
             items=[ProjectTaskOut.model_validate(t) for t in rows],
             total=total,
             page=pagination.page,
             limit=pagination.limit,
         )
-        if cache is not None and key is not None:
-            await cache.set(key, result)
-        return result
 
     async def label_list(self, pid: int, user: User) -> list[Label]:
         await self.project(pid, user)
